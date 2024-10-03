@@ -1,0 +1,5 @@
+.venv/
+
+# Files are too big for git
+results/
+videos/
