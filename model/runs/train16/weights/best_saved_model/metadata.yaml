@@ -1,0 +1,14 @@
+description: Ultralytics YOLO11n-seg model trained on data.yaml
+author: Ultralytics
+date: '2024-10-12T09:39:35.817066'
+version: 8.3.3
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: segment
+batch: 1
+imgsz:
+- 256
+- 256
+names:
+  0: sidewalk

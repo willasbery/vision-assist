@@ -1,0 +1,14 @@
+path: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_model\
+train: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_model\train\images
+val: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_model\valid\images
+test: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_modeltest\images
+
+nc: 1
+names: ["sidewalk"]
+
+roboflow:
+  workspace: projects-5k1o6
+  project: sidewalk-dlu6l
+  version: 1
+  license: Public Domain
+  url: https://universe.roboflow.com/projects-5k1o6/sidewalk-dlu6l/dataset/1

@@ -1,5 +1,10 @@
 .venv/
+__pycache__/
 
+model/yolo*
+
+# temporarily ignore all files in the old folder
+/algorithms/old/*
 # Files are too big for git
-results/
-videos/
+algorithms/results
+algorithms/videos
