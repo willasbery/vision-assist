@@ -10,7 +10,7 @@ from config import (
     mid_grid_colour, 
     far_grid_colour
 )
-from path_finding import a_star, calculate_row_penalty
+from algorithms.misc.path_finding_old import a_star, calculate_row_penalty
 from corner_detection import calculate_path_direction, detect_corner
 from path_detection import find_protrusions
 
@@ -143,11 +143,11 @@ def process_frame(frame: np.ndarray, model) -> np.ndarray:
         Processed frame with visualizations
     """
     results = model.predict(frame, conf=0.5)
-    
-    all_grids = []
+        
+    all_grids = [] # stores all grid coordinates in a 1D list
     grid_centres = {}
     penalties_dict = {}
-    row_dict = defaultdict(list)
+    row_dict = defaultdict(list) # stores the grids in each row
     frame_height, frame_width = frame.shape[:2]
     
     # Extract grid information from masks
@@ -159,17 +159,26 @@ def process_frame(frame: np.ndarray, model) -> np.ndarray:
             points = np.int32([mask])
             x, y, w, h = cv2.boundingRect(points)
             
-            for i in range(y, y + h, grid_size):
-                for j in range(x, x + w, grid_size):
+            min_x = max(x, 0)
+            min_y = max(y, 0)
+            
+            max_x = min(x + w, frame_width - grid_size)
+            max_y = min(y + h, frame_height - grid_size)
+            
+            for i in range(min_y, max_y, grid_size):
+
+                for j in range(min_x, max_x, grid_size):
                     grid_centre = (j + grid_size // 2, i + grid_size // 2)
                     
+                    # Check if the grid centre is inside the mask
                     if cv2.pointPolygonTest(points, grid_centre, False) >= 0:
                         grid = (j, i)
                         all_grids.append(grid)
                         grid_centres[grid] = grid_centre
                         row_dict[grid_centre[1]].append(grid)
+                       
     
-    # Calculate penalties and create graph
+    # If there are no grids, return the original frame as we cannot extract any data
     if not all_grids:
         return frame
         
@@ -180,7 +189,7 @@ def process_frame(frame: np.ndarray, model) -> np.ndarray:
         
         for grid in grids_in_row:
             x, _ = grid
-            penalties_dict[grid] = calculate_row_penalty(x, min_x, max_x)
+            penalties_dict[grid] = calculate_row_penalty(x, min_x, max_x)    
     
     # Create graph
     graph = defaultdict(list)

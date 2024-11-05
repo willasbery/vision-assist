@@ -1,17 +1,12 @@
 import numpy as np
-from typing import List, Tuple
 
 from config import grid_size
 
-def calculate_path_direction(path: List[Tuple[int, int]]) -> Tuple:
+
+
+def calculate_path_direction(path: list[tuple[int, int]]) -> tuple:
     """
     Calculate the general direction of the path.
-    
-    Args:
-        path: List of grid coordinates
-    
-    Returns:
-        Tuple containing bottom/top points, slope, and length
     """
     bottom_grid = max(path, key=lambda g: g[1])
     top_grid = min(path, key=lambda g: g[1])
@@ -30,17 +25,9 @@ def calculate_path_direction(path: List[Tuple[int, int]]) -> Tuple:
     return centre_bottom, centre_top, slope, length
 
 
-def detect_corner(close_slope: float, mid_slope: float, far_slope: float) -> Tuple[str, float]:
+def detect_corner(close_slope: float, mid_slope: float, far_slope: float) -> tuple[str, float]:
     """
-    Detect if there's a corner based on the slopes.
-    
-    Args:
-        close_slope: Slope of the close segment
-        mid_slope: Slope of the middle segment
-        far_slope: Slope of the far segment
-    
-    Returns:
-        Tuple of corner type and confidence
+    Detect if there's a corner based on the slopes
     """
     close_slope = 1000 if abs(close_slope) == float('inf') else close_slope
     mid_slope = 1000 if abs(mid_slope) == float('inf') else mid_slope

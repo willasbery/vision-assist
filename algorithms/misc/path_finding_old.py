@@ -54,6 +54,39 @@ def calculate_row_penalty(x: int, min_x: int, max_x: int) -> float:
     """
     Calculate the penalty for a grid based on its position within a row.
     
+    TODO: make the penalty calculation much better, rather than the basic function used here.
+    the main improvement is to consider each protrusion as a separate row, right now, the green penalty
+    for this example would follow the x's path, which is not ideal.
+         
+    #                      ------            
+    #                     |   x  \           
+    #                     |   x   \          
+    #                    /     x   \         
+    #          -----    /  x        \        
+    #         \     \  /   x         \       
+    #          \     \/    x          \      
+    #           \           x          \     
+    #            |           x          |    
+    #            |           x          |    
+ 
+    # this is because the current imeplementation calculates the penalty based on the x's position in the row,
+    # using the max and min grid in that row, which is not ideal, the penalty should be calculated based on the
+    # x's position in the protrusion, or even simpler, we can just find every contiguous row of grids, and then
+    # calculate an indivdiaul penalty for each of the contiguous rows, this way, the green penalty would follow
+    # a more ideal path such as the one below:
+    
+    #                      ------            
+    #                     |   x  \           
+    #                     |   x   \          
+    #                    /    x   \         
+    #          -----    /     x     \        
+    #         \  x  \  /      x      \       
+    #          \  x  \/       x       \      
+    #           \          x           \     
+    #            |          x           |    
+    #            |          x           | 
+
+    
     Args:
         x: x-coordinate of the grid
         min_x: x-coordinate of the leftmost grid in the row
@@ -69,3 +102,5 @@ def calculate_row_penalty(x: int, min_x: int, max_x: int) -> float:
     position_ratio = (x - min_x) / row_width
     penalty = 2 * abs(position_ratio - 0.5)
     return penalty
+
+    
