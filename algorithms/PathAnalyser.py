@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import ClassVar, Optional
 
 from config import grid_size
-from corner_detection import detect_corner
+from algorithms.misc.corner_detection import detect_corner
 
 
 @dataclass

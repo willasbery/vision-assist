@@ -11,7 +11,7 @@ from config import (
     far_grid_colour
 )
 from algorithms.misc.path_finding_old import a_star, calculate_row_penalty
-from corner_detection import calculate_path_direction, detect_corner
+from algorithms.misc.corner_detection import calculate_path_direction, detect_corner
 from path_detection import find_protrusions
 
 

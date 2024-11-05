@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from config import grid_size
 from algorithms.misc.path_finding import a_star, calculate_row_penalty, get_penalty_colour
-from corner_detection import calculate_path_direction, detect_corner
+from algorithms.misc.corner_detection import calculate_path_direction, detect_corner
 from path_detection import find_protrusions
 from utils import get_closest_grid_to_point
 
