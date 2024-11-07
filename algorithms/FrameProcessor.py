@@ -1,9 +1,12 @@
 import cv2
 import numpy as np
 from collections import defaultdict
+from pydantic import BaseModel
 from typing import ClassVar, Optional, List, Dict, Tuple
+from ultralytics import YOLO
 
 from config import grid_size
+from models import Grid, Coordinate
 from PathFinding import path_finder, penalty_calculator
 from PathAnalyser import Path, path_analyser
 from ProtrusionDetector import ProtrusionDetector
@@ -13,25 +16,32 @@ from utils import get_closest_grid_to_point
 class FrameProcessor:
     """
     FrameProcessor handles the processing of video frames for path detection.
-    Implements the Singleton pattern to ensure only one instance exists.
     """
     _instance: ClassVar[Optional['FrameProcessor']] = None
     _initialized: bool = False
     
-    def __new__(cls):
+    def __new__(cls, model: YOLO, verbose: bool) -> 'FrameProcessor':  
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, model: YOLO, verbose: bool) -> None:
         """Initialize the processor only once."""
         if not self._initialized:
             self._initialized = True
+            self.model = model
+            self.verbose = verbose
+            
             self.frame: Optional[np.ndarray] = None
-            self.model = None
-            self.grids: List[List[Dict]] = []
-            self.grid_lookup: Dict[Tuple[int, int], Dict] = {}
+            self.grids: list[list[Grid]] = []
+            self.grid_lookup: dict[tuple[int, int], Grid] = {}
             self.protrusion_detector = ProtrusionDetector()
+            
+    def _reject_blurry_frames(self, frame: np.ndarray) -> bool:
+        """Reject blurry frames based on the Laplacian variance."""
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        blur_level = cv2.Laplacian(gray_frame, cv2.CV_64F).var()
+        return blur_level < 100
     
     def _extract_grid_information(self, results) -> None:
         """Extract grid information from YOLO detection results."""
@@ -60,34 +70,40 @@ class FrameProcessor:
                     for j in range(x, x + w, grid_size):
                         grid_centre = (j + grid_size // 2, i + grid_size // 2)
                         
-                        if cv2.pointPolygonTest(points, grid_centre, False) >= 0:
-                            grid = {
-                                "coords": {"x": j, "y": i},
-                                "centre": grid_centre,
-                                "penalty": None,
-                                "row": row_count,
-                                "col": col_count
-                            }
-                            this_row.append(grid)
-                            self.grid_lookup[(j, i)] = grid
-                            col_count += 1
+                        grid = Grid(
+                            coords=Coordinate(x=j, y=i), 
+                            centre=grid_centre, 
+                            penalty=None, 
+                            row=row_count, 
+                            col=col_count, 
+                            empty=False if cv2.pointPolygonTest(points, grid_centre, False) >= 0 else True
+                        )
+                        
+                        this_row.append(grid)
+                        self.grid_lookup[(j, i)] = grid
+                        col_count += 1
                     
-                    if this_row:
-                        self.grids.append(this_row)
-                        row_count += 1
+                    self.grids.append(this_row)
+                    row_count += 1
     
     def _calculate_penalties(self) -> None:
         """Calculate penalties for each grid."""
         for grid_row in self.grids:
             for grid in grid_row:
-                grid["penalty"] = penalty_calculator.calculate_row_penalty(grid, self.grids)
+                if grid.empty:
+                    continue
+                
+                grid.penalty = penalty_calculator.calculate_row_penalty(grid, self.grids)
     
     def _create_graph(self) -> defaultdict:
         """Create a graph for A* pathfinding."""
         graph = defaultdict(list)
         for grid_row in self.grids:
             for grid in grid_row:
-                x, y = grid["coords"]["x"], grid["coords"]["y"]
+                if grid.empty:
+                    continue
+                
+                x, y = grid.coords.x, grid.coords.y
                 current_pos = (x, y)
                 
                 neighbor_positions = [
@@ -130,22 +146,27 @@ class FrameProcessor:
         path_grid_coords = set()
         for grid_row in self.grids:
             for grid in grid_row:
-                coords = (grid['coords']['x'], grid['coords']['y'])
+                if grid.empty:
+                    continue
+                
+                coords = (grid.coords.x, grid.coords.y)
                 if coords not in path_grid_coords:
-                    self._draw_grid(grid, penalty_calculator.get_penalty_colour(grid['penalty'] or 0))
+                    self._draw_grid(grid, penalty_calculator.get_penalty_colour(grid.penalty or 0))
     
     def _draw_grid(self, grid: Dict, color: Tuple[int, int, int]) -> None:
         """Draw a single grid on the frame."""
-        x, y = grid['coords']['x'], grid['coords']['y']
+        x, y = grid.coords.x, grid.coords.y
+        
         grid_corners = np.array([
             [x, y],
             [x + grid_size, y],
             [x + grid_size, y + grid_size],
             [x, y + grid_size]
         ], np.int32)
+        
         cv2.fillPoly(self.frame, [grid_corners], color)
     
-    def __call__(self, frame: np.ndarray, model) -> np.ndarray:
+    def __call__(self, frame: np.ndarray) -> bool | np.ndarray:
         """
         Process a single frame with path detection and visualization.
         
@@ -157,10 +178,13 @@ class FrameProcessor:
             Processed frame with visualizations
         """
         self.frame = frame
-        self.model = model
         
+        # Check for blurry frames
+        if self._reject_blurry_frames(frame):
+            return False
+               
         # Get YOLO results
-        results = model.predict(frame, conf=0.5)
+        results = self.model.predict(frame, conf=0.5, verbose=self.verbose)
         
         # Extract grid information
         self._extract_grid_information(results)

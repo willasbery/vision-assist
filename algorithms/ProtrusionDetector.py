@@ -1,35 +1,10 @@
 import cv2
 import numpy as np
-from dataclasses import dataclass
 from typing import ClassVar, Optional
 
 from config import grid_size
+from models import Grid, Peak, ConvexityDefect
 from utils import get_closest_grid_to_point, point_to_line_distance
-
-
-@dataclass
-class ConvexityDefect:
-    """ Represents a convexity defect in a contour. """
-    start: tuple[int, int]
-    end: tuple[int, int]
-    far: tuple[int, int]
-    depth: float
-    
-    @property
-    def angle_degrees(self) -> float:
-        """Calculate the angle of the defect in degrees."""
-        v1 = np.array(self.start) - np.array(self.far)
-        v2 = np.array(self.end) - np.array(self.far)
-        angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-        return np.degrees(angle)
-
-
-@dataclass
-class Peak:
-    """ Represents a peak point with its coordinates and boundaries. """
-    center: tuple[int, int]
-    left: tuple[int, int] | None = None
-    right: tuple[int, int] | None = None
 
 
 class ProtrusionDetector:
@@ -48,24 +23,26 @@ class ProtrusionDetector:
         """Initialize the detector only once."""
         if not self._initialized:
             self._initialized = True
-            self.frame: Optional[np.ndarray] = None
-            self.grids: Optional[list[list[dict]]] = None
+            self.frame: np.ndarray | None = None
+            self.grids: list[Grid] | None = None
             self.height: int = 0
             self.width: int = 0
-            self.binary: Optional[np.ndarray] = None
+            self.binary: np.ndarray | None = None
         
     def _create_binary_image(self) -> np.ndarray:
         binary = np.zeros((self.height, self.width), dtype=np.uint8)
         
         for grid_row in self.grids:
             for grid in grid_row:
-                x, y = grid["coords"]["x"], grid["coords"]["y"]
+                x, y = grid.coords.x, grid.coords.y
+                
                 corners = np.array([
                     [x, y],
                     [x + grid_size, y],
                     [x + grid_size, y + grid_size],
                     [x, y + grid_size]
                 ], np.int32)
+                
                 cv2.fillPoly(binary, [corners], 255)
         
         return cv2.threshold(binary, 127, 255, cv2.THRESH_BINARY)[1]
@@ -111,9 +88,9 @@ class ProtrusionDetector:
         if not closest_grid:
             return False
             
-        col = closest_grid["col"]
-        for row in self.grids[closest_grid["row"] + 1:]:
-            if not any(grid["col"] == col for grid in row):
+        col = closest_grid.col
+        for row in self.grids[closest_grid.row + 1:]:
+            if not any(grid.col == col for grid in row):
                 return False
         return True
     

@@ -17,7 +17,10 @@ def get_closest_grid_to_point(point: tuple[int, int], grids: list[list[dict]]):
     
     for grid_row in grids:
         for grid in grid_row:
-            centre_x, centre_y = grid["centre"]
+            if grid.empty:
+                continue
+            
+            centre_x, centre_y = grid.centre
             
             # Calculate euclidean distance
             distance = np.sqrt((point[0] - centre_x) ** 2 + (point[1] - centre_y) ** 2)
