@@ -15,7 +15,7 @@ class Coordinate(BaseModel):
 
 class Grid(BaseModel):
     coords: Coordinate
-    centre: tuple[int, int]
+    centre: Coordinate
     penalty: float | None # is None when the grid is empty
     row: int
     col: int
@@ -23,22 +23,22 @@ class Grid(BaseModel):
     
     
 class Peak(BaseModel):
-    center: tuple[int, int]
-    left: tuple[int, int] | None = None
-    right: tuple[int, int] | None = None
+    center: Coordinate
+    left: Coordinate | None = None
+    right: Coordinate | None = None
     
     
 class ConvexityDefect(BaseModel):
-    start: tuple[int, int]
-    end: tuple[int, int]
-    far: tuple[int, int]
+    start: Coordinate
+    end: Coordinate
+    far: Coordinate
     depth: float
     
     @computed_field
     @property
     def angle_degrees(self) -> float:
-        v1 = np.array(self.start) - np.array(self.far)
-        v2 = np.array(self.end) - np.array(self.far)
+        v1 = np.array(self.start.to_tuple()) - np.array(self.far.to_tuple())
+        v2 = np.array(self.end.to_tuple()) - np.array(self.far.to_tuple())
         angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
         return np.degrees(angle)
     

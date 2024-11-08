@@ -1,7 +1,9 @@
 import numpy as np
 
+from models import Coordinate, Grid
 
-def get_closest_grid_to_point(point: tuple[int, int], grids: list[list[dict]]):
+
+def get_closest_grid_to_point(point: Coordinate, grids: list[list[Grid]]):
     """
     Get the closest grid to a point.
     
@@ -11,7 +13,7 @@ def get_closest_grid_to_point(point: tuple[int, int], grids: list[list[dict]]):
     
     Returns:
         The closest grid to the point    
-    """
+    """    
     closest_grid: dict = None
     min_distance = np.inf
     
@@ -20,10 +22,8 @@ def get_closest_grid_to_point(point: tuple[int, int], grids: list[list[dict]]):
             if grid.empty:
                 continue
             
-            centre_x, centre_y = grid.centre
-            
             # Calculate euclidean distance
-            distance = np.sqrt((point[0] - centre_x) ** 2 + (point[1] - centre_y) ** 2)
+            distance = np.sqrt((point.x - grid.centre.x) ** 2 + (point.y - grid.centre.y) ** 2)
             
             if distance < min_distance:
                 min_distance = distance
@@ -32,7 +32,7 @@ def get_closest_grid_to_point(point: tuple[int, int], grids: list[list[dict]]):
     return closest_grid
 
 
-def point_to_line_distance(point: tuple[int, int], line_start: tuple[int, int], line_end: tuple[int, int]) -> float:
+def point_to_line_distance(point: Coordinate, line_start: Coordinate, line_end: Coordinate) -> float:
     """
     Calculate the perpendicular distance from a point to a line segment.
     
@@ -44,9 +44,9 @@ def point_to_line_distance(point: tuple[int, int], line_start: tuple[int, int], 
     Returns:
         The perpendicular distance from the point to the line segment
     """
-    x, y = point
-    x1, y1 = line_start
-    x2, y2 = line_end
+    x, y = point.to_tuple()
+    x1, y1 = line_start.to_tuple()
+    x2, y2 = line_end.to_tuple()
     
     # Calculate the distance
     numerator = abs((y2 -y1 ) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)

@@ -68,15 +68,14 @@ class FrameProcessor:
                     this_row = []
                     
                     for j in range(x, x + w, grid_size):
-                        grid_centre = (j + grid_size // 2, i + grid_size // 2)
-                        
+                        grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
                         grid = Grid(
                             coords=Coordinate(x=j, y=i), 
                             centre=grid_centre, 
                             penalty=None, 
                             row=row_count, 
                             col=col_count, 
-                            empty=False if cv2.pointPolygonTest(points, grid_centre, False) >= 0 else True
+                            empty=False if cv2.pointPolygonTest(points, grid_centre.to_tuple(), False) >= 0 else True
                         )
                         
                         this_row.append(grid)
@@ -120,7 +119,7 @@ class FrameProcessor:
         
         return graph
     
-    def _find_paths(self, protrusion_peaks: List[Tuple[int, int]], graph: defaultdict) -> List[Path]:
+    def _find_paths(self, protrusion_peaks: list[Coordinate], graph: defaultdict) -> list[Path]:
         """Find paths using PathFinder."""
         paths = []
         if not self.grids:
@@ -200,7 +199,10 @@ class FrameProcessor:
         graph = self._create_graph()
         
         # Detect protrusions
-        protrusion_peaks = self.protrusion_detector(frame, self.grids)
+        protrusion_peaks = self.protrusion_detector(frame, self.grids, self.grid_lookup)
+        
+        if not protrusion_peaks:
+            print("No protrusions detected.")
         
         # Find paths
         paths = self._find_paths(protrusion_peaks, graph)
