@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 
 from config import grid_size
+from models import Coordinate, Grid
 from utils import get_closest_grid_to_point, point_to_line_distance
 
 
@@ -51,7 +52,7 @@ def find_corner_peak(binary: np.ndarray, region_mask: bool = None, return_min_ma
     return None
 
 
-def get_protrusion_region(binary: np.ndarray, point: tuple[int, int], box_size: tuple[int, int] = (100, 100)) -> np.ndarray:
+def get_protrusion_region(binary: np.ndarray, point: Coordinate, box_size: tuple[int, int] = (100, 100)) -> np.ndarray:
     """
     Create a mask for a square region around a point
     
@@ -68,14 +69,13 @@ def get_protrusion_region(binary: np.ndarray, point: tuple[int, int], box_size: 
     height, width = binary.shape
     
     # Calculate box coordinates
-    x, y = point
     box_height, box_width = box_size
     
     # Calculate box boundaries with image boundary checks
-    x_start = max(0, x - box_width // 2)
-    x_end = min(width, x + box_width // 2)
-    y_start = max(0, y - box_height // 2)
-    y_end = min(height, y + box_height // 2)
+    x_start = max(0, point.x - box_width // 2)
+    x_end = min(width, point.x + box_width // 2)
+    y_start = max(0, point.y - box_height // 2)
+    y_end = min(height, point.y + box_height // 2)
     
     # Create the mask
     mask[y_start:y_end, x_start:x_end] = 255
@@ -83,7 +83,7 @@ def get_protrusion_region(binary: np.ndarray, point: tuple[int, int], box_size: 
     return mask
 
 
-def is_point_near_quadrilateral(point: tuple[int, int], quadrilateral: np.ndarray, threshold: float = 50.0) -> bool:
+def is_point_near_quadrilateral(point: Coordinate, quadrilateral: np.ndarray, threshold: float = 50.0) -> bool:
     """
     Check if a point is within a threshold distance of any edge.
 
@@ -109,7 +109,7 @@ def is_point_near_quadrilateral(point: tuple[int, int], quadrilateral: np.ndarra
     return min(d1, d2, d3, d4) < threshold
 
 
-def check_full_column_below_point(point: tuple[int, int], grids: list[list[dict]]) -> bool:
+def check_full_column_below_point(point: Coordinate, grids: list[Grid]) -> bool:
     """
     Check if every cell in the column below a point is filled.
     
@@ -125,14 +125,14 @@ def check_full_column_below_point(point: tuple[int, int], grids: list[list[dict]
     if not closest_grid:
         return False
     
-    row = closest_grid["row"]
-    col = closest_grid["col"]
+    row = closest_grid.row
+    col = closest_grid.col
     
     for i in range(row + 1, len(grids)):
         invalid_point = True
         
         for grid in grids[i]:
-            if grid["col"] == col:
+            if grid.col == col:
                 invalid_point = False
                 break
         
@@ -142,7 +142,7 @@ def check_full_column_below_point(point: tuple[int, int], grids: list[list[dict]
     return True
 
 
-def threshold_grids(frame: np.ndarray, grids: list[list[dict]]) -> np.ndarray:
+def threshold_grids(frame: np.ndarray, grids: list[list[Grid]]) -> np.ndarray:
     """
     Create a black and white version of the frame to be used in protrusion detection.
     
@@ -158,7 +158,7 @@ def threshold_grids(frame: np.ndarray, grids: list[list[dict]]) -> np.ndarray:
     
     for grid_row in grids:
         for grid in grid_row:
-            i, j = grid["coords"]["x"], grid["coords"]["y"]
+            i, j = grid.coords.x, grid.coords.y
             grid_corners = np.array([
                 [i, j],
                 [i + grid_size, j],
@@ -173,7 +173,7 @@ def threshold_grids(frame: np.ndarray, grids: list[list[dict]]) -> np.ndarray:
     return binary
 
 
-def find_protrusions(frame: np.ndarray, grids: list[list[dict]]) -> list:
+def find_protrusions(frame: np.ndarray, grids: list[list[Grid]]) -> list:
     """
     Find protrusions in the frame using grid information.
     Returns a list of protrusions if found, None otherwise.
