@@ -23,9 +23,10 @@ class Grid(BaseModel):
     
     
 class Peak(BaseModel):
-    center: Coordinate
+    centre: Coordinate
     left: Coordinate | None = None
     right: Coordinate | None = None
+    orientation: Literal["left", "right", "up"]
     
     
 class ConvexityDefect(BaseModel):

@@ -126,7 +126,9 @@ class FrameProcessor:
             return paths
             
         # Find the start grid (middle grid in the bottom row)
-        bottom_row_grids = self.grids[-1]
+        bottom_row_grids = [grid for grid in self.grids[-1] if not grid.empty]
+        
+        # TODO: Handle case where bottom row is empty 
         start_grid = bottom_row_grids[(len(bottom_row_grids) - 1) // 2]
         
         for peak in protrusion_peaks:
@@ -136,6 +138,8 @@ class FrameProcessor:
             if grid_path:  # Only create Path object if a valid path was found
                 path = Path(grids=grid_path, total_cost=total_cost)
                 paths.append(path)
+            else:
+                print("No path found.")
         
         return paths
     
