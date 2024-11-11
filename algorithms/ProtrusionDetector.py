@@ -300,6 +300,7 @@ class ProtrusionDetector:
         self, 
         protrusions: list[Coordinate], 
         convex_hull: cv2.Mat, 
+        global_peaks: list[Peak],
         distance_threshold: int = 100
     ) -> list[Coordinate]:
         """ 
@@ -333,7 +334,14 @@ class ProtrusionDetector:
         
         for cluster in clusters:
             best_point = min(cluster, key=lambda point: cv2.pointPolygonTest(convex_hull, point.to_tuple(), True))
-            filtered_protrusions.append(best_point)  
+            filtered_protrusions.append(best_point)
+            
+        for filtered_protrusion in filtered_protrusions:
+            for global_peak in global_peaks:
+                # add 50% to the threshold to allow for some overlap as we are comparing to the global peak
+                if euclidean_distance(filtered_protrusion, global_peak.centre) < distance_threshold * 1.50:
+                    filtered_protrusions.remove(filtered_protrusion)
+                    break  
             
         return filtered_protrusions      
         
@@ -420,7 +428,8 @@ class ProtrusionDetector:
                     # Draw protrusion peak in red
                     cv2.circle(debug_image, (peak.centre.x, peak.centre.y), 5, (0, 0, 255), -1)
                 
-        filtered_protrusions = self._filter_protrusions(protrusions, hull)
+        filtered_protrusions = self._filter_protrusions(protrusions, hull, global_peaks)
+        
         
         # DEBUG
         # Add legend
