@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from typing import ClassVar, Optional
+import uuid
 
 from config import grid_size
 from models import Grid, Peak, ConvexityDefect, Coordinate
@@ -51,34 +52,19 @@ class ProtrusionDetector:
         return cv2.threshold(binary, 127, 255, cv2.THRESH_BINARY)[1]
     
     def _find_peak(
-        self, 
-        defect_centre: Coordinate | None = None, 
-        # grid_lookup: dict[tuple[int, int], Grid], 
-        region_around_protrusion: np.ndarray | None = None # TODO: remove the optional region mask
-    ) -> list[Peak] | None:
-        """    
-        TODO:
-        Try to find the "peak" of a path, in either the vertical, left or right direction.
-        The peak is the highest point in the path, and is used to determine the path's direction.
-        
-        Here are the three cases (the * indicates the peak):
-        
-               Vertical             Left               Right
-             -------------      -------------      -------------
-            |             |    |        ---- |    | ----        |
-            |   --*---    |    |     ---     |    |     ---     |
-            |  |      |   |    |   *|        |    |        |*   |
-            | /        \  |    |     ---     |    |    ----     |
-            |/          \ |    |        ---  |    | ---         |
-             -------------      -------------      -------------     
-             
-        """        
+    self, 
+    defect_centre: Coordinate | None = None, 
+    region_around_protrusion: np.ndarray | None = None
+) -> list[Peak] | None:
+        """
+        Find the peak of a path and determine its orientation.
+        A peak is considered to be pointing upward if it meets certain geometric criteria.
+        """
         if region_around_protrusion is None or defect_centre is None:
             region = self.binary
             x_offset, y_offset = 0, 0
         else:
             region = region_around_protrusion
-            # Calculate offsets based on the region position in the full frame
             box_height, box_width = region.shape[:2]
             x_offset = max(0, defect_centre.x - box_width // 2)
             y_offset = max(0, defect_centre.y - box_height // 2)
@@ -88,109 +74,86 @@ class ProtrusionDetector:
             return []
         
         y_coords, x_coords = region_points
+        
+        # Find the topmost point(s)
         min_y = np.min(y_coords)
         peak_x_coords = np.sort(x_coords[y_coords == min_y])
         
         if not peak_x_coords.size:
             return []
         
+        # Split into groups if there are gaps
         gaps = np.diff(peak_x_coords)
-        # needs to be at least 1/4 of the grid size apart to account for noise
         split_points = np.where(gaps > (grid_size // 4))[0] + 1
         contiguous_groups = np.split(peak_x_coords, split_points)
         
-        # Find the peak(s) in the vertical direction if the region mask is None
-        if region_around_protrusion is None:
-            peaks = []
+        peaks = []
+        
+        for group in contiguous_groups:
+            # Get the middle x-coordinate of this peak group
+            centre_x = int(group[len(group) // 2])
             
-            for group in contiguous_groups:
-                centre_x = int(group[len(group) // 2])
-                peaks.append(Peak(
-                    centre=Coordinate(x=centre_x, y=int(min_y)),
-                    left=Coordinate(x=int(group[0]), y=int(min_y)),
-                    right=Coordinate(x=int(group[-1]), y=int(min_y)),
-                    orientation="up" # no region mask defaults to vertical
-                ))
+            # Find points within a vertical slice below the peak
+            slice_width = grid_size
+            mask = (x_coords >= centre_x - slice_width//2) & (x_coords <= centre_x + slice_width//2)
+            vertical_slice_y = y_coords[mask]
+            vertical_slice_x = x_coords[mask]
+            
+            if len(vertical_slice_y) == 0:
+                continue
                 
-            return peaks
+            # Calculate the height and width of the region below the peak
+            height = np.max(vertical_slice_y) - min_y
+            width = np.max(x_coords) - np.min(x_coords)
             
-        # Calculate the point distribution relative to centre
-        centre_x = region.shape[1] // 2
-        left_points = np.sum(x_coords < centre_x)
-        right_points = np.sum(x_coords > centre_x)
-        total_points = left_points + right_points
-        
-        left_ratio = left_points / total_points if total_points > 0 else 0
-        right_ratio = right_points / total_points if total_points > 0 else 0
-        
-        centre = None
-        left = None
-        right = None
-        
-        if abs(left_ratio - right_ratio) < 0.2:
-            orientation = "up"
+            # A peak is considered upward-pointing if:
+            # 1. The height below the peak is significantly larger than its width
+            # 2. The peak is the highest point in its local region
+            # 3. There's a continuous vertical path below the peak
+            is_upward = (height > width * 0.5 and  # Height should be at least half the width
+                        len(vertical_slice_y) > height * 0.5)  # Should have points along the vertical path
+            
+            orientation = "up" if is_upward else "right" if centre_x > np.mean(x_coords) else "left"
+            
             # Add offsets to convert to global coordinates
             centre = Coordinate(x=centre_x + x_offset, y=int(min_y) + y_offset)
-            left = Coordinate(x=int(peak_x_coords[0]) + x_offset, y=int(min_y) + y_offset)
-            right = Coordinate(x=int(peak_x_coords[-1]) + x_offset, y=int(min_y) + y_offset)
+            left = Coordinate(x=int(group[0]) + x_offset, y=int(min_y) + y_offset)
+            right = Coordinate(x=int(group[-1]) + x_offset, y=int(min_y) + y_offset)
             
-        elif left_ratio > right_ratio:
-            orientation = "left"
-            leftmost_x = np.min(x_coords)
-            leftmost_y_coords = y_coords[x_coords == leftmost_x]
-            
-            middle_y = int(leftmost_y_coords[len(leftmost_y_coords) // 2])
-            max_y = np.max(leftmost_y_coords)
-            min_y = np.min(leftmost_y_coords)
-            
-            # Add offsets to convert to global coordinates
-            centre = Coordinate(x=int(leftmost_x) + x_offset, y=middle_y + y_offset)
-            left = Coordinate(x=int(leftmost_x) + x_offset, y=int(max_y) + y_offset)
-            right = Coordinate(x=int(leftmost_x) + x_offset, y=int(min_y) + y_offset)
-            
-        else:
-            orientation = "right"
-            rightmost_x = np.max(x_coords)
-            rightmost_y_coords = y_coords[x_coords == rightmost_x]
-            
-            middle_y = int(rightmost_y_coords[len(rightmost_y_coords) // 2])
-            max_y = np.max(rightmost_y_coords)
-            min_y = np.min(rightmost_y_coords)
-            
-            # Add offsets to convert to global coordinates
-            centre = Coordinate(x=int(rightmost_x) + x_offset, y=middle_y + y_offset)
-            left = Coordinate(x=int(rightmost_x) + x_offset, y=int(min_y) + y_offset)
-            right = Coordinate(x=int(rightmost_x) + x_offset, y=int(max_y) + y_offset)
-
-        # Validate that all points were found
-        if centre is None or left is None or right is None:
-            return []
-
-        # Visualize the peak (using local coordinates for visualization)
-        debug_img = region.copy()
-        # Convert back to local coordinates for visualization
-        local_centre = Coordinate(x=centre.x - x_offset, y=centre.y - y_offset)
-        local_left = Coordinate(x=left.x - x_offset, y=left.y - y_offset)
-        local_right = Coordinate(x=right.x - x_offset, y=right.y - y_offset)
-        
-        cv2.circle(debug_img, local_centre.to_tuple(), 5, 255, -1)
-        cv2.circle(debug_img, local_left.to_tuple(), 3, 128, -1)
-        cv2.circle(debug_img, local_right.to_tuple(), 3, 128, -1)
-        cv2.putText(debug_img, orientation, (local_centre.x - 20, local_centre.y - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1)
-
-        cv2.imshow("Peak", debug_img)
-        cv2.waitKey(0)
+            # Debug visualization
+            if region_around_protrusion is not None:
+                debug_img = region.copy()
+                # Convert to local coordinates for visualization
+                local_centre = Coordinate(x=centre_x, y=int(min_y))
+                local_left = Coordinate(x=int(group[0]), y=int(min_y))
+                local_right = Coordinate(x=int(group[-1]), y=int(min_y))
                 
-        return [Peak(
-            centre=centre,
-            left=left,
-            right=right,
-            orientation=orientation
-        )]
+                cv2.circle(debug_img, local_centre.to_tuple(), 5, 255, -1)
+                cv2.circle(debug_img, local_left.to_tuple(), 3, 128, -1)
+                cv2.circle(debug_img, local_right.to_tuple(), 3, 128, -1)
+                cv2.putText(debug_img, orientation, (local_centre.x - 20, local_centre.y - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1)
+                
+                # Draw vertical slice region
+                cv2.rectangle(debug_img, 
+                            (centre_x - slice_width//2, min_y),
+                            (centre_x + slice_width//2, np.max(vertical_slice_y)),
+                            128, 1)
+
+                cv2.imshow(f"Peak Analysis - {orientation}", debug_img)
+                cv2.waitKey(0)
+            
+            peaks.append(Peak(
+                centre=centre,
+                left=left,
+                right=right,
+                orientation=orientation
+            ))
+        
+        return peaks
         
     def _get_region_around_protrusion(self, point: Coordinate) -> np.ndarray:
-        box_height, box_width = self.frame.shape[1] // 6, self.frame.shape[0] // 6
+        box_height, box_width = self.frame.shape[1] // 4, self.frame.shape[0] // 4
     
         # Calculate crop boundaries in original image
         x_start = max(0, point.x - box_width // 2)
@@ -239,16 +202,48 @@ class ProtrusionDetector:
         return True
     
     def _is_point_near_quadrilateral(self, point: Coordinate, quad: np.ndarray, threshold: int) -> bool:
-        distances = [
-            point_to_line_distance(
-                point, 
-                quad[i],
-                quad[(i + 1) % 4]
-            )
-            for i in range(len(quad) - 1)
-        ]
+        """
+        Determine if a point is near or inside a quadrilateral.
         
-        return min(distances) < threshold
+        Args:
+            point: Point to check
+            quad: List of 4 coordinates forming the quadrilateral
+            threshold: Distance threshold
+        
+        Returns:
+            bool: True if point is near or inside the quadrilateral
+        """
+        # Convert quad to numpy array for calculations
+        quad_points = np.array([[p.x, p.y] for p in quad], dtype=np.int32)
+        
+        # First check if point is inside the quadrilateral
+        if cv2.pointPolygonTest(quad_points, point.to_tuple(), False) >= 0:
+            return True
+            
+        # If not inside, calculate distance to each edge
+        edge_distances = []
+        for i in range(len(quad)):
+            next_i = (i + 1) % len(quad)
+            
+            # Get edge vector
+            edge = np.array([quad[next_i].x - quad[i].x, quad[next_i].y - quad[i].y])
+            edge_length = np.linalg.norm(edge)
+            
+            if edge_length == 0:  # Skip if edge has zero length
+                continue
+                
+            # Calculate distance
+            dist = point_to_line_distance(point, quad[i], quad[next_i])
+            
+            # Adjust threshold based on edge orientation
+            # Vertical edges (more y difference than x difference) get a larger threshold
+            is_vertical = abs(edge[1]) > abs(edge[0])
+            adjusted_threshold = threshold * 1.5 if is_vertical else threshold
+            
+            edge_distances.append((dist, adjusted_threshold))
+        
+        # Check if point is within adjusted threshold of any edge
+        return any(dist < thresh for dist, thresh in edge_distances)
     
     def _get_quadrilateral(self, global_peaks: list[Peak], contour: np.ndarray) -> list[Coordinate]:
         """Get the quadrilateral that encompasses the main path."""
@@ -301,7 +296,7 @@ class ProtrusionDetector:
         protrusions: list[Coordinate], 
         convex_hull: cv2.Mat, 
         global_peaks: list[Peak],
-        distance_threshold: int = 100
+        distance_threshold: int = 150
     ) -> list[Coordinate]:
         """ 
         Filter out protrusions that are too close to each other.
@@ -316,6 +311,10 @@ class ProtrusionDetector:
         
         for point in protrusions:
             added_to_cluster = False
+            
+            # remove any protrusions that are too close to the bottom of the frame
+            if point.y > self.height - (self.height // 10):
+                continue
             
             for cluster in clusters:
                 if any(
@@ -345,7 +344,43 @@ class ProtrusionDetector:
             
         return filtered_protrusions      
         
+    def _detect_smooth_protrusions(self, contour: np.ndarray) -> list[Coordinate]:
+        """Detect protrusions by analyzing contour curvature and direction changes."""
+        # Get bounding box
+        x, y, w, h = cv2.boundingRect(contour)
         
+        # Sample points along the contour at regular intervals
+        num_samples = 50
+        epsilon = cv2.arcLength(contour, True) * 0.02
+        approx_contour = cv2.approxPolyDP(contour, epsilon, True)
+        
+        # Analyze direction changes
+        protrusions = []
+        directions = []
+        
+        for i in range(len(approx_contour)):
+            prev_idx = (i - 1) % len(approx_contour)
+            next_idx = (i + 1) % len(approx_contour)
+            
+            # Calculate direction vectors
+            prev_vec = approx_contour[i][0] - approx_contour[prev_idx][0]
+            next_vec = approx_contour[next_idx][0] - approx_contour[i][0]
+            
+            # Normalize vectors
+            prev_vec = prev_vec / np.linalg.norm(prev_vec)
+            next_vec = next_vec / np.linalg.norm(next_vec)
+            
+            # Calculate direction change
+            dot_product = np.dot(prev_vec, next_vec)
+            direction_change = np.arccos(np.clip(dot_product, -1.0, 1.0))
+            
+            # Check if this is a significant direction change
+            if direction_change > np.pi/4:  # 45 degrees
+                point = approx_contour[i][0]
+                protrusions.append(Coordinate(x=int(point[0]), y=int(point[1])))
+                
+        return protrusions
+    
     def __call__(self, frame: np.ndarray, grids: list[list[Grid]], grid_lookup: dict[tuple[int, int], Grid]) -> list[Coordinate]:
         """
         Process a new frame to detect protrusions.
@@ -374,8 +409,14 @@ class ProtrusionDetector:
         if not contours:
             print("No contours found.")
             return []
-            
+        
+        protrusions = []
+        
         contour = max(contours, key=cv2.contourArea)
+        
+        smooth_protrusions = self._detect_smooth_protrusions(contour)
+        protrusions.extend(smooth_protrusions)
+            
         x, y, w, h = cv2.boundingRect(contour)
         
         # Draw convex hull in green
@@ -396,8 +437,6 @@ class ProtrusionDetector:
         
         if defects is None:
             return [global_peak.centre for global_peak in global_peaks]
-        
-        protrusions = []
       
         for defect in defects:
             convexity_defect = ConvexityDefect(
@@ -406,30 +445,25 @@ class ProtrusionDetector:
                 far=Coordinate(x=int(contour[defect[0][2]][0][0]), y=int(contour[defect[0][2]][0][1])),
                 depth=float(defect[0][3])
             )
-            
-            if not (convexity_defect.depth > 0.35 * w and 
-                45 < convexity_defect.angle_degrees < 120 and
-                convexity_defect.start.y < y + (0.7 * h)):
+                        
+            if not (convexity_defect.depth > 0.25 * w and 
+                30 < convexity_defect.angle_degrees < 150 and
+                convexity_defect.start.y < y + (0.8 * h)):
                 continue     
-            
-            # Get the centre of the region around the defect
-            defect_centre = Coordinate(
-                x=(convexity_defect.start.x + convexity_defect.end.x) // 2,
-                y=(convexity_defect.start.y + convexity_defect.end.y) // 2
-            )
                 
-            region_around_protrusion = self._get_region_around_protrusion(defect_centre)
-            peaks = self._find_peak(defect_centre, region_around_protrusion)
+            region_around_protrusion = self._get_region_around_protrusion(convexity_defect.start)            
+            
+            peaks = self._find_peak(convexity_defect.start, region_around_protrusion)
             
             for peak in peaks:
-                if (not self._is_point_near_quadrilateral(peak.centre, quad, threshold=50) and 
-                    cv2.pointPolygonTest(quad_points, peak.centre.to_tuple(), False) < 0):
+                point_near_quad = self._is_point_near_quadrilateral(peak.centre, quad, threshold=150)
+                point_inside = cv2.pointPolygonTest(quad_points, peak.centre.to_tuple(), False) >= 0
+                
+                if not point_near_quad and not point_inside:
                     protrusions.append(peak.centre)
-                    # Draw protrusion peak in red
                     cv2.circle(debug_image, (peak.centre.x, peak.centre.y), 5, (0, 0, 255), -1)
                 
         filtered_protrusions = self._filter_protrusions(protrusions, hull, global_peaks)
-        
         
         # DEBUG
         # Add legend
