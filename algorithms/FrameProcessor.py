@@ -119,29 +119,74 @@ class FrameProcessor:
         
         return graph
     
+    def _calculate_path_similarity(self, path1: Path, path2: Path) -> float:
+        """
+        Calculate path similarity using section-based comparison.
+        """
+        if not path1.sections or not path2.sections:
+            return 0.0
+            
+        # Compare direction vectors of corresponding sections
+        similarities = []
+        for section1, section2 in zip(path1.sections, path2.sections):
+            dot_product = np.dot(section1.direction_vector, section2.direction_vector)
+            # Clip to handle floating point errors
+            similarity = np.clip(dot_product, -1.0, 1.0)
+            similarities.append((1.0 + similarity) / 2.0)
+            
+        return np.mean(similarities)
+    
     def _find_paths(self, protrusion_peaks: list[Coordinate], graph: defaultdict) -> list[Path]:
-        """Find paths using PathFinder."""
-        paths = []
+        """Find paths using PathFinder with enhanced path analysis."""
+        all_paths = []
         if not self.grids:
-            return paths
+            return all_paths
             
         # Find the start grid (middle grid in the bottom row)
         bottom_row_grids = [grid for grid in self.grids[-1] if not grid.empty]
         
-        # TODO: Handle case where bottom row is empty 
+        # If bottom row is empty, look for the closest non-empty row from bottom
+        if not bottom_row_grids:
+            for row in reversed(self.grids[:-1]):
+                bottom_row_grids = [grid for grid in row if not grid.empty]
+                if bottom_row_grids:
+                    break
+            
+            if not bottom_row_grids:
+                print("No valid start position found - all rows are empty")
+                return all_paths
+        
+        # Select middle grid from the found row
         start_grid = bottom_row_grids[(len(bottom_row_grids) - 1) // 2]
         
         for peak in protrusion_peaks:
             closest_grid = get_closest_grid_to_point(peak, self.grids)
             grid_path, total_cost = path_finder.find_path(graph, start_grid, closest_grid, self.grid_lookup)
             
-            if grid_path:  # Only create Path object if a valid path was found
+            if grid_path:
                 path = Path(grids=grid_path, total_cost=total_cost)
-                paths.append(path)
+                all_paths.append(path)
             else:
                 print("No path found.")
         
-        return paths
+        # Filter similar paths using the new section-based similarity
+        unique_paths: list[Path] = []
+        all_paths.sort(key=lambda x: len(x.grids), reverse=True)
+        
+        for path in all_paths:
+            is_unique = True
+            
+            for existing_path in unique_paths:
+                similarity = self._calculate_path_similarity(path, existing_path)
+                
+                if similarity >= 0.90:  # Adjusted threshold for section-based comparison
+                    is_unique = False
+                    break
+            
+            if is_unique:
+                unique_paths.append(path)
+        
+        return unique_paths
     
     def _draw_non_path_grids(self) -> None:
         """Draw all non-path grids with their penalty colors."""
