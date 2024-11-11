@@ -6,9 +6,9 @@ from typing import ClassVar, Optional, List, Dict, Tuple
 from ultralytics import YOLO
 
 from config import grid_size
-from models import Grid, Coordinate
+from models import Grid, Coordinate, Path
 from PathFinding import path_finder, penalty_calculator
-from PathAnalyser import Path, path_analyser
+from PathAnalyser import path_analyser
 from ProtrusionDetector import ProtrusionDetector
 from utils import get_closest_grid_to_point
 

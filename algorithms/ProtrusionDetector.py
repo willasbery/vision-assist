@@ -414,7 +414,8 @@ class ProtrusionDetector:
             peaks = self._find_peak(defect_centre, region_around_protrusion)
             
             for peak in peaks:
-                if peak and not self._is_point_near_quadrilateral(peak.centre, quad, threshold=50) and cv2.pointPolygonTest(quad_points, peak.centre.to_tuple(), False) < 0:
+                if (not self._is_point_near_quadrilateral(peak.centre, quad, threshold=50) and 
+                    cv2.pointPolygonTest(quad_points, peak.centre.to_tuple(), False) < 0):
                     protrusions.append(peak.centre)
                     # Draw protrusion peak in red
                     cv2.circle(debug_image, (peak.centre.x, peak.centre.y), 5, (0, 0, 255), -1)
