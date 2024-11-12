@@ -4,7 +4,6 @@ __pycache__/
 model/yolo*
 
 # temporarily ignore all files in the old folder
-/algorithms/old/*
 # Files are too big for git
-algorithms/results
-algorithms/videos
+/results
+/videos
