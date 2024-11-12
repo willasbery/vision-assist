@@ -1,8 +1,7 @@
 import cv2
 import numpy as np
 from collections import defaultdict
-from pydantic import BaseModel
-from typing import ClassVar, Optional, List, Dict, Tuple
+from typing import ClassVar, Optional
 from ultralytics import YOLO
 
 from config import grid_size
@@ -201,7 +200,7 @@ class FrameProcessor:
                 if coords not in path_grid_coords:
                     self._draw_grid(grid, penalty_calculator.get_penalty_colour(grid.penalty or 0))
     
-    def _draw_grid(self, grid: Dict, color: Tuple[int, int, int]) -> None:
+    def _draw_grid(self, grid: dict, color: tuple[int, int, int]) -> None:
         """Draw a single grid on the frame."""
         x, y = grid.coords.x, grid.coords.y
         
