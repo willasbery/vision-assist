@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 from typing import ClassVar, Optional
-import uuid
 
 from config import grid_size
 from models import Grid, Peak, ConvexityDefect, Coordinate
