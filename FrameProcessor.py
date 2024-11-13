@@ -6,8 +6,9 @@ from ultralytics import YOLO
 
 from config import grid_size
 from models import Grid, Coordinate, Path
-from PathFinding import path_finder, penalty_calculator
+from PathFinder import path_finder
 from PathAnalyser import path_analyser
+from PenaltyCalculator import penalty_calculator
 from ProtrusionDetector import ProtrusionDetector
 from utils import get_closest_grid_to_point
 
@@ -122,19 +123,23 @@ class FrameProcessor:
         """
         Calculate path similarity using section-based comparison.
         """
-        if not path1.sections or not path2.sections:
+        grids1 = {(g.coords.x, g.coords.y) for g in path1.grids}
+        grids2 = {(g.coords.x, g.coords.y) for g in path2.grids}
+        
+        if not grids1 or not grids2:
             return 0.0
-            
-        # Compare direction vectors of corresponding sections
-        similarities = []
-        for section1, section2 in zip(path1.sections, path2.sections):
-            dot_product = np.dot(section1.direction_vector, section2.direction_vector)
-            # Clip to handle floating point errors
-            similarity = np.clip(dot_product, -1.0, 1.0)
-            similarities.append((1.0 + similarity) / 2.0)
-            
-        return np.mean(similarities)
-    
+        
+        intersection = len(grids1.intersection(grids2))
+        
+        # Check if one path is a subset of the other
+        if intersection == len(grids1) or intersection == len(grids2):
+            return 1.0
+        
+        union = len(grids1.union(grids2))
+        
+        # Jaccard similarity coefficient
+        return intersection / union if union > 0 else 0.0
+        
     def _find_paths(self, protrusion_peaks: list[Coordinate], graph: defaultdict) -> list[Path]:
         """Find paths using PathFinder with enhanced path analysis."""
         all_paths = []
@@ -160,10 +165,15 @@ class FrameProcessor:
         
         for peak in protrusion_peaks:
             closest_grid = get_closest_grid_to_point(peak, self.grids)
+            
             grid_path, total_cost = path_finder.find_path(graph, start_grid, closest_grid, self.grid_lookup)
             
             if grid_path:
-                path = Path(grids=grid_path, total_cost=total_cost)
+                path = Path(
+                    grids=grid_path,
+                    total_cost=total_cost, 
+                    path_type="path"
+                )
                 all_paths.append(path)
             else:
                 print("No path found.")
