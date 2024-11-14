@@ -397,7 +397,8 @@ class ProtrusionDetector:
         # Draw binary image in gray
         debug_image[self.binary == 255] = [255, 255, 255]
         
-        # Find global peak
+        # Find global peak - the highest point in the mask, we always kind of assume the user
+        # is walking from the bottom to the top of the frame
         global_peaks = self._find_peak()
         if global_peaks is None:
             print("No global peak found.")
@@ -413,8 +414,9 @@ class ProtrusionDetector:
         
         contour = max(contours, key=cv2.contourArea)
         
-        smooth_protrusions = self._detect_smooth_protrusions(contour)
-        protrusions.extend(smooth_protrusions)
+        # Smooth protrusions tend to be less accurate, so I have commented them out for now
+        # smooth_protrusions = self._detect_smooth_protrusions(contour)
+        # protrusions.extend(smooth_protrusions)
             
         x, y, w, h = cv2.boundingRect(contour)
         
@@ -484,5 +486,4 @@ class ProtrusionDetector:
         # cv2.destroyAllWindows()
         # # END OF DEBUG
         
-        print("Length of global peaks:", len(global_peaks))
         return [global_peak.centre for global_peak in global_peaks] + filtered_protrusions

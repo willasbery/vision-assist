@@ -237,8 +237,8 @@ class FrameProcessor:
         self.frame = frame
         
         # Check for blurry frames
-        if self._reject_blurry_frames(frame):
-            return False
+        # if self._reject_blurry_frames(frame):
+        #     return False
                
         # Get YOLO results
         results = self.model.predict(frame, conf=0.5, verbose=self.verbose)
