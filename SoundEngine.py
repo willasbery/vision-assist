@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import ClassVar, Optional, Dict
 from dataclasses import dataclass
 
-from PathAnalyser import Corner
+from vision_assist.PathAnalyser import Corner
 
 
 @dataclass

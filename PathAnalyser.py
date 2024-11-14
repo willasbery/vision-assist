@@ -3,8 +3,8 @@ import numpy as np
 from dataclasses import dataclass
 from typing import ClassVar, Literal, Optional
 
-from config import grid_size
-from models import PathColours, Path
+from vision_assist.config import grid_size
+from vision_assist.models import PathColours, Path
 
 
 class PathAnalyser:

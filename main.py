@@ -4,8 +4,8 @@ import time
 from pathlib import Path
 from ultralytics import YOLO
 
-from FrameProcessor import FrameProcessor
-from MockCamera import MockCamera
+from vision_assist.FrameProcessor import FrameProcessor
+from vision_assist.MockCamera import MockCamera
 
 
 def parse_opt():

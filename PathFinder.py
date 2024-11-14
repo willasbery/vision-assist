@@ -1,7 +1,7 @@
 from heapq import heappop, heappush
 from typing import ClassVar, Optional
 
-from models import Grid
+from vision_assist.models import Grid
 
 
 class PathFinder:

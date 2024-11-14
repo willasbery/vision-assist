@@ -4,13 +4,13 @@ from collections import defaultdict
 from typing import ClassVar, Optional
 from ultralytics import YOLO
 
-from config import grid_size
-from models import Grid, Coordinate, Path
-from PathFinder import path_finder
-from PathAnalyser import path_analyser
-from PenaltyCalculator import penalty_calculator
-from ProtrusionDetector import ProtrusionDetector
-from utils import get_closest_grid_to_point
+from vision_assist.config import grid_size
+from vision_assist.models import Grid, Coordinate, Path
+from vision_assist.PathFinder import path_finder
+from vision_assist.PathAnalyser import path_analyser
+from vision_assist.PenaltyCalculator import penalty_calculator
+from vision_assist.ProtrusionDetector import ProtrusionDetector
+from vision_assist.utils import get_closest_grid_to_point
 
 
 class FrameProcessor:

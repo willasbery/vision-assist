@@ -1,5 +1,6 @@
 from typing import ClassVar, Optional
-from config import grid_size, penalty_colour_gradient
+
+from vision_assist.config import grid_size, penalty_colour_gradient
 
 
 class PenaltyCalculator:
