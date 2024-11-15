@@ -1,12 +1,12 @@
 task: segment
 mode: train
-model: yolo11m-seg.pt
-data: data.yaml
+model: yolo11n-seg.pt
+data: ./data.yaml
 epochs: 150
 time: null
 patience: 100
 batch: 16
-imgsz: 640
+imgsz: 480
 save: true
 save_period: -1
 cache: false
@@ -104,4 +104,4 @@ erasing: 0.4
 crop_fraction: 1.0
 cfg: null
 tracker: botsort.yaml
-save_dir: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_model\model\runs\segment\train
+save_dir: C:\Users\willi\Desktop\Uni\Year3Project\vision-assist\model\runs\segment\train
