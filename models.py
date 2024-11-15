@@ -12,7 +12,6 @@ class Coordinate(BaseModel):
     def to_tuple(self) -> tuple[int, int]:
         return (self.x, self.y)
 
-
 class Grid(BaseModel):
     coords: Coordinate
     centre: Coordinate
@@ -21,13 +20,11 @@ class Grid(BaseModel):
     col: int
     empty: bool
     
-    
 class Peak(BaseModel):
     centre: Coordinate
     left: Coordinate | None = None
     right: Coordinate | None = None
-    orientation: Literal["left", "right", "up"]
-    
+    orientation: Literal["left", "right", "up"] 
     
 class ConvexityDefect(BaseModel):
     start: Coordinate
@@ -41,14 +38,13 @@ class ConvexityDefect(BaseModel):
         v1 = np.array(self.start.to_tuple()) - np.array(self.far.to_tuple())
         v2 = np.array(self.end.to_tuple()) - np.array(self.far.to_tuple())
         angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-        return np.degrees(angle)
-    
+        return np.degrees(angle) 
     
 class Corner(BaseModel):
     type: Literal["left", "right"]
+    sharpness: Literal["sharp", "sweeping"]
     confidence: float
     angle_change: float
-    
     
 class Obstacle(BaseModel):
     type: Literal["left", "right", "forward_instruct_left", "forward_instruct_right"]
@@ -63,29 +59,29 @@ class Obstacle(BaseModel):
         x, y, w, h = self.bbox
         return (x + w // 2, y + h // 2)
     
-    
 class PathColours(BaseModel):
     close: tuple[int, int, int]
     mid: tuple[int, int, int]
     far: tuple[int, int, int]
-    
 
 class Path(BaseModel):
+    """
+    Represents a path through a grid with its properties and sections.
+    Each path can have sub-sections which are also Path objects.
+    """
     grids: list[Grid]
     total_cost: float
-    section_type: Literal["close", "mid", "far"] | None = None # None for full path
+    path_type: Literal["path", "section"]
+    sections: list[Path] | None = None  # a path section cannot have sections
     
-    corner: Corner | None = None
-    obstacles: list[Obstacle] | None = None
-    
-    far_section: Path | None = None
-    mid_section: Path | None = None
-    close_section: Path | None = None
+    corners: list[Corner] | None = None  # a path section cannot have a corner 
+    obstacles: list[Obstacle] | None = None  # a path section cannot have obstacles
     
     def model_post_init(self, __context: Any) -> None:
-        if not self.section_type and self.grids:
+        if self.path_type == "path" and self.grids:  # only create sections for main path
+            print(self.grids)
             self._calculate_sections()
-            self._detect_corner()
+            self._detect_corners()
             self._detect_obstacles()
     
     @computed_field
@@ -93,7 +89,6 @@ class Path(BaseModel):
     def start(self) -> Coordinate:
         if not self.grids:
             return Coordinate(x=0, y=0)
-        
         return self.grids[0].coords
     
     @computed_field
@@ -101,7 +96,6 @@ class Path(BaseModel):
     def end(self) -> Coordinate:
         if not self.grids:
             return Coordinate(x=0, y=0)
-        
         return self.grids[-1].coords
     
     @computed_field
@@ -115,89 +109,83 @@ class Path(BaseModel):
         return np.degrees(angle)
     
     @property
-    def has_corner(self) -> bool:
-        return self.corner is not None
-    
-    @computed_field
-    @property
-    def has_all_sections(self) -> bool:
-        if self.section_type is not None:
-            raise AttributeError("Section paths do not have sections")
-        return (
-            self.far_section is not None and 
-            self.mid_section is not None and 
-            self.close_section is not None
-        )
+    def has_a_corner(self) -> bool:
+        return self.corners is not None
         
     def _calculate_sections(self) -> None:
         """
-        Calculate far, mid, and close sections of the path.
+        Divide the path into sections
         Each section is created as its own Path object.
         """
         if not self.grids:
             return
             
-        y_coords = [grid.coords.y for grid in self.grids]
-        min_y = min(y_coords)
-        max_y = max(y_coords)
-        y_range = abs(max_y - min_y)
+        self.sections = []
         
-        far_threshold = min_y + (y_range * 0.1)  # <10% from the top
-        mid_threshold = min_y + (y_range * 0.4)  # >10% and <40% from the top
-        
-        # Create section paths
-        far_grids = [grid for grid in self.grids if grid.coords.y <= far_threshold]
-        self.far_section = Path(
-            grids=far_grids,
-            total_cost=self.total_cost * (len(far_grids) / len(self.grids)),
-            section_type='far'
-        )
-        
-        mid_grids = [grid for grid in self.grids 
-                    if far_threshold < grid.coords.y <= mid_threshold]
-        self.mid_section = Path(
-            grids=mid_grids,
-            total_cost=self.total_cost * (len(mid_grids) / len(self.grids)),
-            section_type='mid'
-        )
-        
-        close_grids = [grid for grid in self.grids if grid.coords.y > mid_threshold]
-        self.close_section = Path(
-            grids=close_grids,
-            total_cost=self.total_cost * (len(close_grids) / len(self.grids)),
-            section_type='close'
-        )
+        for i in range(0, len(self.grids)):
+            
+            
+            section_grids = self.grids[i:i+5]
+            section_cost = self.total_cost * (len(section_grids) / len(self.grids))
+                
+            section = Path(
+                grids=section_grids,
+                total_cost=section_cost,
+                path_type="section",
+            )
+                
+            self.sections.append(section)
     
-    def _normalize_slope(self, slope: float) -> float:
-        return 1000 if abs(slope) == float('inf') else slope
-    
-    def _detect_corner(self) -> None:
-        if not self.has_all_sections:
+    def _detect_corners(self) -> None:
+        """
+        Detect multiple corners by analyzing angle changes across multiple sections.
+        Uses a variable window size to detect both sharp and gradual turns.
+        """
+        if not self.sections or len(self.sections) < 3:
             return
         
-        close_slope = self._normalize_slope(self.close_section.angle)
-        mid_slope = self._normalize_slope(self.mid_section.angle)
-        far_slope = self._normalize_slope(self.far_section.angle)
+        self.corners = []
         
-        diff_close_mid = abs(close_slope - mid_slope)
-        diff_mid_far = abs(mid_slope - far_slope)
-        total_angle_change = abs(far_slope - close_slope)
-        max_slope = max(abs(close_slope), abs(mid_slope), abs(far_slope))
+        def calculate_angle_between_sections(section1: Path, section2: Path) -> float:
+            start1, end1 = section1.start, section1.end
+            start2, end2 = section2.start, section2.end
+            
+            v1 = np.array(end1.to_tuple()) - np.array(start1.to_tuple())
+            v2 = np.array(end2.to_tuple()) - np.array(start2.to_tuple())
+            
+            unit_v1 = v1 / np.linalg.norm(v1)
+            unit_v2 = v2 / np.linalg.norm(v2)
+            
+            dot_product = np.dot(unit_v1, unit_v2)
+            angle = np.arccos(np.clip(dot_product, -1.0, 1.0))
+            return np.degrees(angle)
         
-        confidence = min(diff_close_mid, diff_mid_far) / max_slope if max_slope > 0 else 0
         
-        if abs(far_slope) > abs(mid_slope) > abs(close_slope):
-            self.corner = Corner(
-                type="left", 
-                confidence=confidence, 
-                angle_change=total_angle_change
+        for i in range(len(self.sections) - 1):
+            angle_change = calculate_angle_between_sections(self.sections[i], self.sections[i+1])
+            
+            if angle_change < 10 or angle_change > 80:
+                continue
+            
+            sharpness = "sharp" if angle_change > 45 else "sweeping"
+            cross_product = (
+                (self.sections[i+1].end.x - self.sections[i].start.x) *
+                (self.sections[i+1].end.y - self.sections[i].start.y) -
+                (self.sections[i+1].end.y - self.sections[i].start.y) *
+                (self.sections[i+1].end.x - self.sections[i].start.x)
             )
-        elif abs(close_slope) > abs(mid_slope) > abs(far_slope):
-            self.corner = Corner(
-                type="right", 
-                confidence=confidence, 
-                angle_change=total_angle_change
+            
+            corner_type = "right" if cross_product > 0 else "left"
+            confidence = min(angle_change / 90, 1)
+            
+            corner = Corner(
+                type=corner_type,
+                sharpness=sharpness,
+                confidence=confidence,
+                angle_change=angle_change
             )
+            self.corners.append(corner)
+      
             
     def _detect_obstacles(self) -> None:
         pass    
