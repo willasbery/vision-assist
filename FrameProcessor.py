@@ -92,7 +92,7 @@ class FrameProcessor:
                 if grid.empty:
                     continue
                 
-                grid.penalty = penalty_calculator.calculate_row_penalty(grid, self.grids)
+                grid.penalty = penalty_calculator.calculate_penalty(grid, self.grid_lookup)
     
     def _create_graph(self) -> defaultdict:
         """Create a graph for A* pathfinding."""

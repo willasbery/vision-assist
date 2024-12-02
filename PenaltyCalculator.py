@@ -1,6 +1,8 @@
 from typing import ClassVar, Optional
 
 from vision_assist.config import grid_size, penalty_colour_gradient
+from vision_assist.models import Coordinate, Grid
+
 
 
 class PenaltyCalculator:
@@ -21,67 +23,92 @@ class PenaltyCalculator:
         if not self._initialized:
             self._initialized = True
     
-    def _find_grid_index(self, current_coords: dict, row_grids: list[dict]) -> int:
+    def _calculate_segment_penalty(
+        self, grid: Grid, grid_lookup: dict[tuple[int, int], Grid], direction: str
+    ) -> float:
         """
-        Find the index of a grid in a row using binary search.
+        Calculate penalty for a grid within a segment (row or column).
         """
-        left, right = 0, len(row_grids) - 1
-        while left <= right:
-            mid = (left + right) // 2
-            if row_grids[mid].coords == current_coords:
-                return mid
-            elif row_grids[mid].coords.x < current_coords.x:
-                left = mid + 1
-            else:
-                right = mid - 1
-        return -1
-    
-    def calculate_row_penalty(self, current_grid: dict, grids: list[list[dict]]) -> float:
-        """
-        Calculate penalty for a grid based on its position within continuous segments.
-        """
-        row = current_grid.row
-        row_grids = grids[row]
-        current_coords = current_grid.coords
-        
-        if len(row_grids) == 1:
-            return 0
-        
-        current_idx = self._find_grid_index(current_coords, row_grids)
-        if current_idx == -1:
-            return 0
-        
-        # Find segment boundaries
-        x = current_coords.x
-        furthest_left = current_idx
-        furthest_right = current_idx
-        
-        # Find the furthest left grid in the segment
-        while (furthest_left > 0 and 
-               row_grids[furthest_left - 1].empty == False):
-            furthest_left -= 1
-            x -= grid_size
-        
-        # Find the furthest right grid in the segment
-        x = current_coords.x
-        while (furthest_right < len(row_grids) - 1 and 
-               row_grids[furthest_right + 1].empty == False):
-            furthest_right += 1
-            x += grid_size
-        
-        segment_width = furthest_right - furthest_left
+        current_coords = grid.coords
+        x, y = current_coords.x, current_coords.y
+        furthest_left, furthest_right = current_coords, current_coords
+
+        # Traverse in the left/up direction
+        while True:
+            next_coords = (
+                (x - grid_size, y) if direction == "row" else (x, y - grid_size)
+            )
+            if next_coords not in grid_lookup or grid_lookup[next_coords].empty:
+                break
+            furthest_left = Coordinate(x=next_coords[0], y=next_coords[1])
+            x, y = next_coords
+
+        # Reset x, y to the current coordinates
+        x, y = current_coords.x, current_coords.y
+
+        # Traverse in the right/down direction
+        while True:
+            next_coords = (
+                (x + grid_size, y) if direction == "row" else (x, y + grid_size)
+            )
+            if next_coords not in grid_lookup or grid_lookup[next_coords].empty:
+                break
+            furthest_right = Coordinate(x=next_coords[0], y=next_coords[1])
+            x, y = next_coords
+
+        segment_width = (
+            (furthest_right.x - furthest_left.x) // grid_size
+            if direction == "row"
+            else (furthest_right.y - furthest_left.y) // grid_size
+        )
         if segment_width == 0:
             return 0
-            
-        position_ratio = (current_idx - furthest_left) / segment_width
+
+        position_ratio = (
+            (current_coords.x - furthest_left.x) / (furthest_right.x - furthest_left.x)
+            if direction == "row"
+            else (current_coords.y - furthest_left.y)
+            / (furthest_right.y - furthest_left.y)
+        )
         return 2 * abs(position_ratio - 0.5)
     
+    def calculate_penalty(self, grid: Grid, grid_lookup: dict[tuple[int, int], Grid]) -> float:
+        """
+        Calculate penalty for a grid based on its position within continuous segments
+        in both its row and column using grid lookup.
+        """
+        if grid.empty:
+            return 0
+
+        # Calculate row and column penalties
+        row_penalty = self._calculate_segment_penalty(grid, grid_lookup, "row")
+        col_penalty = self._calculate_segment_penalty(grid, grid_lookup, "col")
+        
+        if row_penalty > 0.99 or col_penalty > 0.99:
+            return 1
+
+        total_penalty = row_penalty + col_penalty
+        if total_penalty == 0:
+            return 0
+
+        # Calculate dominance factor
+        dominance_factor = abs(row_penalty - col_penalty) / total_penalty
+        row_weight = 0.5 + (0.25 * dominance_factor if row_penalty > col_penalty else -0.25 * dominance_factor)
+        col_weight = 1 - row_weight
+
+        # Weighted average
+        penalty = (row_penalty * row_weight) + (col_penalty * col_weight)
+
+        return penalty
+
     def get_penalty_colour(self, penalty: float) -> tuple[int, int, int]:
         """
-        Get the color based on the penalty value.
+        Get the colour based on the penalty value.
         """
-        closest_key = min(penalty_colour_gradient.keys(), 
-                         key=lambda x: abs(x - penalty))
+        closest_key = min(
+            penalty_colour_gradient.keys(),
+            key=lambda x: abs(x - penalty),
+        )
         return penalty_colour_gradient[closest_key]
 
 

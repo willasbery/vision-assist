@@ -9,6 +9,6 @@ if __name__ == '__main__':
     torch.multiprocessing.freeze_support()
     
     # build the model using gpu
-    model = YOLO('yolo11m-seg.pt').to("cuda")  # Use the 'yolov11n-seg' model for segmentation
+    model = YOLO('yolo11n-seg.pt').to("cuda")  # Use the 'yolov11n-seg' model for segmentation
     
-    results = model.train(data="data.yaml", epochs=150, imgsz=640) # train the model
+    results = model.train(data="./data.yaml", epochs=150, imgsz=480) # train the model
