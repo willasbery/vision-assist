@@ -136,38 +136,38 @@ def main():
     # Parse command line arguments
     args = setup_argparse()
     
-    try:
-        # Get file paths
-        image_path, grid_path = get_file_paths(args)
-        
-        # Initialize the enhanced processor
-        frame_processor = SingleSavedFrameFrameProcessor(model="", verbose=False)
-        
-        # Load the frame
-        frame = cv2.imread(str(image_path))
-        if frame is None:
-            raise FileNotFoundError(f"Could not load frame image from {image_path}")
-        
-        # Load the saved grid data
-        frame_processor.load_saved_data(frame, grid_path)
-        
-        # Process the frame
-        processed_frame = frame_processor(frame)
-        
-        if isinstance(processed_frame, np.ndarray):
-            # Display the processed frame
-            cv2.imshow("Processed Frame", processed_frame)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-        else:
-            print("Frame processing failed")
+    # try:
+    # Get file paths
+    image_path, grid_path = get_file_paths(args)
+    
+    # Initialize the enhanced processor
+    frame_processor = SingleSavedFrameFrameProcessor(model="", verbose=False)
+    
+    # Load the frame
+    frame = cv2.imread(str(image_path))
+    if frame is None:
+        raise FileNotFoundError(f"Could not load frame image from {image_path}")
+    
+    # Load the saved grid data
+    frame_processor.load_saved_data(frame, grid_path)
+    
+    # Process the frame
+    processed_frame = frame_processor(frame)
+    
+    if isinstance(processed_frame, np.ndarray):
+        # Display the processed frame
+        cv2.imshow("Processed Frame", processed_frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    else:
+        print("Frame processing failed")
             
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        sys.exit(1)
+    # except FileNotFoundError as e:
+    #     print(f"Error: {e}")
+    #     sys.exit(1)
+    # except Exception as e:
+    #     print(f"An unexpected error occurred: {e}")
+    #     sys.exit(1)
 
 if __name__ == "__main__":
     main()

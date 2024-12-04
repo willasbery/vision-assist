@@ -119,28 +119,28 @@ class ProtrusionDetector:
             left = Coordinate(x=int(group[0]) + x_offset, y=int(min_y) + y_offset)
             right = Coordinate(x=int(group[-1]) + x_offset, y=int(min_y) + y_offset)
             
-            # Debug visualization
-            if region_around_protrusion is not None:
-                debug_img = region.copy()
-                # Convert to local coordinates for visualization
-                local_centre = Coordinate(x=centre_x, y=int(min_y))
-                local_left = Coordinate(x=int(group[0]), y=int(min_y))
-                local_right = Coordinate(x=int(group[-1]), y=int(min_y))
+            # # Debug visualization
+            # if region_around_protrusion is not None:
+            #     debug_img = region.copy()
+            #     # Convert to local coordinates for visualization
+            #     local_centre = Coordinate(x=centre_x, y=int(min_y))
+            #     local_left = Coordinate(x=int(group[0]), y=int(min_y))
+            #     local_right = Coordinate(x=int(group[-1]), y=int(min_y))
                 
-                cv2.circle(debug_img, local_centre.to_tuple(), 5, 255, -1)
-                cv2.circle(debug_img, local_left.to_tuple(), 3, 128, -1)
-                cv2.circle(debug_img, local_right.to_tuple(), 3, 128, -1)
-                cv2.putText(debug_img, orientation, (local_centre.x - 20, local_centre.y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1)
+            #     cv2.circle(debug_img, local_centre.to_tuple(), 5, 255, -1)
+            #     cv2.circle(debug_img, local_left.to_tuple(), 3, 128, -1)
+            #     cv2.circle(debug_img, local_right.to_tuple(), 3, 128, -1)
+            #     cv2.putText(debug_img, orientation, (local_centre.x - 20, local_centre.y - 10),
+            #                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1)
                 
-                # Draw vertical slice region
-                cv2.rectangle(debug_img, 
-                            (centre_x - slice_width//2, min_y),
-                            (centre_x + slice_width//2, np.max(vertical_slice_y)),
-                            128, 1)
+            #     # Draw vertical slice region
+            #     cv2.rectangle(debug_img, 
+            #                 (centre_x - slice_width//2, min_y),
+            #                 (centre_x + slice_width//2, np.max(vertical_slice_y)),
+            #                 128, 1)
 
-                cv2.imshow(f"Peak Analysis - {orientation}", debug_img)
-                cv2.waitKey(0)
+            #     cv2.imshow(f"Peak Analysis - {orientation}", debug_img)
+            #     cv2.waitKey(0)
             
             peaks.append(Peak(
                 centre=centre,
@@ -413,8 +413,9 @@ class ProtrusionDetector:
         
         contour = max(contours, key=cv2.contourArea)
         
-        smooth_protrusions = self._detect_smooth_protrusions(contour)
-        protrusions.extend(smooth_protrusions)
+        # TODO: fix the smooth protrusions so they do not overfire
+        # smooth_protrusions = self._detect_smooth_protrusions(contour)
+        # protrusions.extend(smooth_protrusions)
             
         x, y, w, h = cv2.boundingRect(contour)
         
