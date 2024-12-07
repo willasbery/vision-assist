@@ -117,8 +117,14 @@ class FrameProcessor:
                     this_row = []
                     
                     for j in range(x, x + w, grid_size):
-                        grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
+                        # Check if the grid already exists                        
+                        if (j, i) in self.grid_lookup and not self.grid_lookup[(j, i)].empty:
+                            grid = self.grid_lookup[(j, i)]
+                            this_row.append(grid)
+                            col_count += 1
+                            continue
                         
+                        grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
                         grid = Grid(
                             coords=Coordinate(x=j, y=i), 
                             centre=grid_centre, 
