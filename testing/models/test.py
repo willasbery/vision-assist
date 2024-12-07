@@ -52,5 +52,10 @@ for path in grids:
         cv2.putText(frame, f"{corner.direction}: {corner.sharpness} @ {corner.angle_change}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
 
+
+
     cv2.imshow("Path", frame)
     cv2.waitKey(0)
+    
+    
+    cv2.imwrite(f"{path[0].coords.x}_{path[0].coords.y}.png", frame)
