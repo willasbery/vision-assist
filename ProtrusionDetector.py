@@ -480,7 +480,9 @@ class ProtrusionDetector:
         cv2.putText(debug_image, "Protrusions: Red", (10, legend_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
         cv2.putText(debug_image, "Global Peak: Magenta", (10, legend_y + 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
         
-        cv2.imshow("Protrusion Detection", debug_image)
+        resized_debug = cv2.resize(debug_image, (576, 1024), interpolation=cv2.INTER_AREA)
+        
+        cv2.imshow("Protrusion Detection", resized_debug)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         # END OF DEBUG

@@ -41,9 +41,10 @@ class ConvexityDefect(BaseModel):
         return np.degrees(angle) 
     
 class Corner(BaseModel):
-    type: Literal["left", "right"]
+    direction: Literal["left", "right"]
     sharpness: Literal["sharp", "sweeping"]
-    confidence: float
+    start: Coordinate
+    end: Coordinate
     angle_change: float
     
 class Obstacle(BaseModel):
@@ -53,7 +54,6 @@ class Obstacle(BaseModel):
     angle: float
     confidence: float
     
-    @computed_field
     @property
     def centre(self) -> tuple[int, int]:
         x, y, w, h = self.bbox
@@ -71,7 +71,7 @@ class Path(BaseModel):
     """
     grids: list[Grid]
     total_cost: float
-    path_type: Literal["path", "section"]
+    path_type: Literal["path", "section-straight", "section-curved"]
     sections: list[Path] | None = None  # a path section cannot have sections
     
     corners: list[Corner] | None = None  # a path section cannot have a corner 
@@ -79,7 +79,7 @@ class Path(BaseModel):
     
     def model_post_init(self, __context: Any) -> None:
         if self.path_type == "path" and self.grids:  # only create sections for main path
-            print(self.grids)
+            # print(self.grids)
             self._calculate_sections()
             self._detect_corners()
             self._detect_obstacles()
@@ -110,82 +110,118 @@ class Path(BaseModel):
     
     @property
     def has_a_corner(self) -> bool:
-        return self.corners is not None
+        return self.corners is not None 
         
     def _calculate_sections(self) -> None:
         """
-        Divide the path into sections
-        Each section is created as its own Path object.
+        Divide path into sections by identifying straight segments and the paths between them.
+        A straight segment is defined as 3 or more grids moving only horizontally or vertically.
         """
         if not self.grids:
             return
             
         self.sections = []
+        straight_sections = []  # Will store tuples of (start_idx, end_idx)
         
-        for i in range(0, len(self.grids)):
+        # First pass: identify straight sections
+        current_start = 0
+        last_direction = None
+        straight_count = 1
+        
+        for i in range(1, len(self.grids)):
+            current_grid = self.grids[i]
+            prev_grid = self.grids[i-1]
             
+            dx = current_grid.coords.x - prev_grid.coords.x
+            dy = current_grid.coords.y - prev_grid.coords.y
             
-            section_grids = self.grids[i:i+5]
-            section_cost = self.total_cost * (len(section_grids) / len(self.grids))
+            current_direction = "verticle" if dx == 0 and dy != 0 else \
+                                "horizontal" if dy == 0 and dx != 0 else None
+            last_direction = current_direction if i == 1 else last_direction
                 
-            section = Path(
-                grids=section_grids,
+            if current_direction == last_direction:
+                straight_count += 1
+                if straight_count >= 5 and i == len(self.grids) - 1:
+                    straight_sections.append((current_start, i))
+            else:
+                if straight_count >= 5:
+                    straight_sections.append((current_start, i-1))
+                current_start = i
+                straight_count = 1
+                
+            last_direction = current_direction
+        
+        # Second pass: create sections from straight segments and paths between them
+        last_end = 0
+        for start, end in straight_sections:
+            # Add section for path between straight sections if it exists
+            if start > last_end:
+                between_grids = self.grids[last_end:start+1]  # Include start grid for connectivity
+                section_cost = self.total_cost * (len(between_grids) / len(self.grids))
+                between_section = Path(
+                    grids=between_grids,
+                    total_cost=section_cost,
+                    path_type="section-curved"
+                )
+                self.sections.append(between_section)
+            
+            # Add straight section
+            straight_grids = self.grids[start:end+1]
+            section_cost = self.total_cost * (len(straight_grids) / len(self.grids))
+            straight_section = Path(
+                grids=straight_grids,
                 total_cost=section_cost,
-                path_type="section",
+                path_type="section-straight"
             )
-                
-            self.sections.append(section)
-    
+            self.sections.append(straight_section)
+            last_end = end
+        
+        # Add final section if there are remaining grids
+        if last_end < len(self.grids) - 1:
+            final_grids = self.grids[last_end:]
+            section_cost = self.total_cost * (len(final_grids) / len(self.grids))
+            final_section = Path(
+                grids=final_grids,
+                total_cost=section_cost,
+                path_type="section-curved"
+            )
+            self.sections.append(final_section)
+        
     def _detect_corners(self) -> None:
         """
-        Detect multiple corners by analyzing angle changes across multiple sections.
-        Uses a variable window size to detect both sharp and gradual turns.
+        Detect corners on a non-straight section
         """
-        if not self.sections or len(self.sections) < 3:
+        if not self.sections:
             return
         
         self.corners = []
         
-        def calculate_angle_between_sections(section1: Path, section2: Path) -> float:
-            start1, end1 = section1.start, section1.end
-            start2, end2 = section2.start, section2.end
-            
-            v1 = np.array(end1.to_tuple()) - np.array(start1.to_tuple())
-            v2 = np.array(end2.to_tuple()) - np.array(start2.to_tuple())
-            
-            unit_v1 = v1 / np.linalg.norm(v1)
-            unit_v2 = v2 / np.linalg.norm(v2)
-            
-            dot_product = np.dot(unit_v1, unit_v2)
-            angle = np.arccos(np.clip(dot_product, -1.0, 1.0))
-            return np.degrees(angle)
-        
-        
-        for i in range(len(self.sections) - 1):
-            angle_change = calculate_angle_between_sections(self.sections[i], self.sections[i+1])
-            
-            if angle_change < 10 or angle_change > 80:
+        for section in self.sections:
+            # ignore straight sections
+            if section.path_type == "section-straight":
                 continue
             
-            sharpness = "sharp" if angle_change > 45 else "sweeping"
-            cross_product = (
-                (self.sections[i+1].end.x - self.sections[i].start.x) *
-                (self.sections[i+1].end.y - self.sections[i].start.y) -
-                (self.sections[i+1].end.y - self.sections[i].start.y) *
-                (self.sections[i+1].end.x - self.sections[i].start.x)
-            )
+            start_grid = section.grids[0]
+            end_grid = section.grids[-1]
             
-            corner_type = "right" if cross_product > 0 else "left"
-            confidence = min(angle_change / 90, 1)
+            dx = end_grid.coords.x - start_grid.coords.x
+            dy = end_grid.coords.y - start_grid.coords.y
+            
+            angle_change = abs(np.degrees(np.arctan2(dy, dx)))
+            
+            while angle_change > 90:
+                angle_change -= 90
+            
+            sharpness = "sharp" if angle_change > 45 else "sweeping"
             
             corner = Corner(
-                type=corner_type,
+                direction="right" if start_grid.coords.x - end_grid.coords.x < 0 else "left",
                 sharpness=sharpness,
-                confidence=confidence,
+                start=start_grid.coords,
+                end=end_grid.coords,
                 angle_change=angle_change
             )
             self.corners.append(corner)
       
-            
     def _detect_obstacles(self) -> None:
         pass
