@@ -19,6 +19,7 @@ class Grid(BaseModel):
     row: int
     col: int
     empty: bool
+    artificial: bool
     
 class Peak(BaseModel):
     centre: Coordinate
@@ -43,8 +44,8 @@ class ConvexityDefect(BaseModel):
 class Corner(BaseModel):
     direction: Literal["left", "right"]
     sharpness: Literal["sharp", "sweeping"]
-    start: Coordinate
-    end: Coordinate
+    start: Coordinate # TODO: change to a grid?
+    end: Coordinate # TODO: change to a grid?
     angle_change: float
     
 class Obstacle(BaseModel):

@@ -33,8 +33,8 @@ class FrameProcessor:
             self.verbose = verbose
             
             self.frame: Optional[np.ndarray] = None
-            self.grids: list[list[Grid]] = []
-            self.grid_lookup: dict[tuple[int, int], Grid] = {}
+            self.grids: list[list[Grid]] = [] # 2d array of grids
+            self.grid_lookup: dict[tuple[int, int], Grid] = {} # (x, y) -> Grid mapping
             self.protrusion_detector = ProtrusionDetector()
             
     def _reject_blurry_frames(self, frame: np.ndarray) -> bool:
@@ -60,8 +60,13 @@ class FrameProcessor:
                 x = x - (x % grid_size)
                 y = y - (y % grid_size)
                 w = w + (grid_size - w % grid_size) if w % grid_size != 0 else w
+                w = self.frame.shape[1] if w > self.frame.shape[1] else w                
                 h = h + (grid_size - h % grid_size) if h % grid_size != 0 else h
                 
+                artifical_grid_column_xs = [(self.frame.shape[1] // 2) - grid_size, self.frame.shape[1] // 2]
+                added_a_grid = False
+                    
+                # First create grids for the actual mask
                 row_count = 0
                 for i in range(y, y + h, grid_size):
                     col_count = 0
@@ -69,13 +74,59 @@ class FrameProcessor:
                     
                     for j in range(x, x + w, grid_size):
                         grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
+                        in_mask = cv2.pointPolygonTest(points, grid_centre.to_tuple(), False) >= 0
+                        
+                        if in_mask:
+                            added_a_grid = True
+                        
                         grid = Grid(
                             coords=Coordinate(x=j, y=i), 
                             centre=grid_centre, 
                             penalty=None, 
                             row=row_count, 
                             col=col_count, 
-                            empty=False if cv2.pointPolygonTest(points, grid_centre.to_tuple(), False) >= 0 else True
+                            empty=not in_mask,
+                            artificial=False
+                        )
+                        
+                        this_row.append(grid)
+                        self.grid_lookup[(j, i)] = grid
+                        col_count += 1
+                    
+                    self.grids.append(this_row)
+                    row_count += 1
+                    
+                if not added_a_grid:
+                    print("No grids were added for the mask.")
+                    continue
+                
+                starting_y = None
+                for i in range(y + h - grid_size, y - grid_size, -grid_size):  # Scan from bottom up
+                    x0, x1 = artifical_grid_column_xs
+                                    
+                    if not self.grid_lookup[(x0, i)].empty or not self.grid_lookup[(x1, i)].empty:
+                        starting_y = i + grid_size  # Start one grid below the last filled row
+                        break
+
+                if starting_y is None:
+                    starting_y = y  # If we didn't find any filled grids, start from the top of the mask
+                    
+                # Then create the artificial column from the bottom of the mask to the frame bottom
+                for i in range(starting_y, self.frame.shape[0], grid_size):
+                    col_count = 0
+                    this_row = []
+                    
+                    for j in range(x, x + w, grid_size):
+                        grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
+                        
+                        grid = Grid(
+                            coords=Coordinate(x=j, y=i), 
+                            centre=grid_centre, 
+                            penalty=None, 
+                            row=row_count, 
+                            col=col_count, 
+                            empty=False if j in artifical_grid_column_xs else True,
+                            artificial=True
                         )
                         
                         this_row.append(grid)
@@ -146,22 +197,8 @@ class FrameProcessor:
         if not self.grids:
             return all_paths
             
-        # Find the start grid (middle grid in the bottom row)
-        bottom_row_grids = [grid for grid in self.grids[-1] if not grid.empty]
-        
-        # If bottom row is empty, look for the closest non-empty row from bottom
-        if not bottom_row_grids:
-            for row in reversed(self.grids[:-1]):
-                bottom_row_grids = [grid for grid in row if not grid.empty]
-                if bottom_row_grids:
-                    break
-            
-            if not bottom_row_grids:
-                print("No valid start position found - all rows are empty")
-                return all_paths
-        
-        # Select middle grid from the found row
-        start_grid = bottom_row_grids[(len(bottom_row_grids) - 1) // 2]
+        # Always start from the middle of the last row
+        start_grid = self.grids[-1][len(self.grids[-1]) // 2]
         
         for peak in protrusion_peaks:
             closest_grid = get_closest_grid_to_point(peak, self.grids)

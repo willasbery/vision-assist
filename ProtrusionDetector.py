@@ -28,6 +28,9 @@ class ProtrusionDetector:
             self.height: int = 0
             self.width: int = 0
             self.binary: np.ndarray | None = None
+            
+            # For debug image
+            self.frames_processed = 0
         
     def _create_binary_image(self) -> np.ndarray:
         binary = np.zeros((self.height, self.width), dtype=np.uint8)
@@ -380,22 +383,52 @@ class ProtrusionDetector:
                 
         return protrusions
     
+    def create_debug_image(self) -> np.ndarray:
+        # Create RGB debug image
+        debug_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        
+        # Draw grids first
+        for grid_row in self.grids:
+            for grid in grid_row:
+                x, y = grid.coords.to_tuple()
+                corners = np.array([
+                    [x, y],
+                    [x + grid_size, y],
+                    [x + grid_size, y + grid_size],
+                    [x, y + grid_size]
+                ], np.int32)
+                
+                # Fill grid with color based on state
+                if grid.empty:
+                    color = (50, 50, 200)
+                elif grid.artificial:
+                    color = (50, 200, 50)
+                else:
+                    color = (200, 50, 50)
+                    
+                cv2.fillPoly(debug_image, [corners], color)
+                
+                # Draw grid borders in white
+                cv2.polylines(debug_image, [corners], True, (255, 255, 255), 1)
+                
+        return debug_image
+    
     def __call__(self, frame: np.ndarray, grids: list[list[Grid]], grid_lookup: dict[tuple[int, int], Grid]) -> list[Coordinate]:
         """
         Process a new frame to detect protrusions.
         
         Returns:
-            tuple: (list of protrusion coordinates, debug visualization image)
+            list: A list of protrusion coordinates
         """
         self.frame = frame
         self.grids = grids
         self.height, self.width = frame.shape[:2]
         self.binary = self._create_binary_image()
         
+        self.frames_processed += 1
+        
         # Create debug image (copy of original frame or blank canvas)
-        debug_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-        # Draw binary image in gray
-        debug_image[self.binary == 255] = [255, 255, 255]
+        debug_image = self.create_debug_image()
         
         # Find global peak
         global_peaks = self._find_peak()
@@ -479,6 +512,8 @@ class ProtrusionDetector:
         cv2.putText(debug_image, "Far Points: Cyan", (10, legend_y + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
         cv2.putText(debug_image, "Protrusions: Red", (10, legend_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
         cv2.putText(debug_image, "Global Peak: Magenta", (10, legend_y + 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+        cv2.putText(debug_image, "Frames Processed: " + str(self.frames_processed), (10, legend_y + 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
         
         resized_debug = cv2.resize(debug_image, (576, 1024), interpolation=cv2.INTER_AREA)
         

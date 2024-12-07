@@ -79,6 +79,9 @@ class PenaltyCalculator:
         """
         if grid.empty:
             return 0
+        
+        if grid.artificial:
+            return 0.1
 
         # Calculate row and column penalties
         row_penalty = self._calculate_segment_penalty(grid, grid_lookup, "row")
