@@ -63,7 +63,12 @@ class FrameProcessor:
                 w = self.frame.shape[1] if w > self.frame.shape[1] else w                
                 h = h + (grid_size - h % grid_size) if h % grid_size != 0 else h
                 
-                artifical_grid_column_xs = [(self.frame.shape[1] // 2) - grid_size, self.frame.shape[1] // 2]
+                artifical_grid_column_xs = [
+                    x for x in range(
+                        (self.frame.shape[1] // 2) - (grid_size * 8), 
+                        (self.frame.shape[1] // 2) + (grid_size * (8 + 1)), grid_size
+                    )
+                ]
                 added_a_grid = False
                     
                 # First create grids for the actual mask
@@ -76,8 +81,7 @@ class FrameProcessor:
                         grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
                         in_mask = cv2.pointPolygonTest(points, grid_centre.to_tuple(), False) >= 0
                         
-                        if in_mask:
-                            added_a_grid = True
+                        if in_mask: added_a_grid = True
                         
                         grid = Grid(
                             coords=Coordinate(x=j, y=i), 
@@ -88,7 +92,7 @@ class FrameProcessor:
                             empty=not in_mask,
                             artificial=False
                         )
-                        
+                                                
                         this_row.append(grid)
                         self.grid_lookup[(j, i)] = grid
                         col_count += 1
@@ -99,48 +103,45 @@ class FrameProcessor:
                 if not added_a_grid:
                     print("No grids were added for the mask.")
                     continue
+                         
+                starting_y = int(self.frame.shape[0] * 0.8) + (grid_size - int(self.frame.shape[0] * 0.8) % grid_size)
                 
-                starting_y = None
-                for i in range(y + h - grid_size, y - grid_size, -grid_size):  # Scan from bottom up
-                    x0, x1 = artifical_grid_column_xs
-                                    
-                    if not self.grid_lookup[(x0, i)].empty or not self.grid_lookup[(x1, i)].empty:
-                        starting_y = i + grid_size  # Start one grid below the last filled row
-                        break
-
-                if starting_y is None:
-                    starting_y = y  # If we didn't find any filled grids, start from the top of the mask
-                    
-                # Then create the artificial column from the bottom of the mask to the frame bottom
-                for i in range(starting_y, self.frame.shape[0], grid_size):
-                    col_count = 0
+                for i in range (starting_y, self.frame.shape[0], grid_size):
+                    row_count = (i - y) // grid_size
                     this_row = []
-                    
+                 
                     for j in range(x, x + w, grid_size):
-                        # Check if the grid already exists                        
-                        if (j, i) in self.grid_lookup and not self.grid_lookup[(j, i)].empty:
-                            grid = self.grid_lookup[(j, i)]
-                            this_row.append(grid)
-                            col_count += 1
-                            continue
-                        
-                        grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
+                        previously_empty = self.grid_lookup.get((j, i)).empty if self.grid_lookup.get((j, i)) else True
+                                    
+                        if previously_empty:
+                            if j in artifical_grid_column_xs:
+                                empty = False
+                                artificial = True
+                            else:
+                                empty = True
+                                artificial = False
+                        else:
+                            empty = False
+                            artificial = False
+                                
+                        grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))   
                         grid = Grid(
                             coords=Coordinate(x=j, y=i), 
                             centre=grid_centre, 
                             penalty=None, 
                             row=row_count, 
-                            col=col_count, 
-                            empty=False if j in artifical_grid_column_xs else True,
-                            artificial=True
-                        )
-                        
-                        this_row.append(grid)
+                            col=(j - x) // grid_size, 
+                            empty=empty,
+                            artificial=artificial
+                        ) 
+                                                     
                         self.grid_lookup[(j, i)] = grid
-                        col_count += 1
+                        this_row.append(grid)
                     
-                    self.grids.append(this_row)
-                    row_count += 1
+                    if row_count < len(self.grids) - 1:
+                        self.grids[row_count] = this_row
+                    else:
+                        self.grids.append(this_row)
     
     def _calculate_penalties(self) -> None:
         """Calculate penalties for each grid."""

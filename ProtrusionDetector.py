@@ -54,10 +54,10 @@ class ProtrusionDetector:
         return cv2.threshold(binary, 127, 255, cv2.THRESH_BINARY)[1]
     
     def _find_peak(
-    self, 
-    defect_centre: Coordinate | None = None, 
-    region_around_protrusion: np.ndarray | None = None
-) -> list[Peak] | None:
+        self, 
+        defect_centre: Coordinate | None = None, 
+        region_around_protrusion: np.ndarray | None = None
+    ) -> list[Peak] | None:
         """
         Find the peak of a path and determine its orientation.
         A peak is considered to be pointing upward if it meets certain geometric criteria.
