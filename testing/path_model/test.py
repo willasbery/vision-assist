@@ -56,5 +56,4 @@ for path in grids:
     cv2.imshow("Path", frame)
     cv2.waitKey(0)
     
-    
     cv2.imwrite(f"{path[0].coords.x}_{path[0].coords.y}.png", frame)
