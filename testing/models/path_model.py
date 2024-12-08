@@ -62,7 +62,7 @@ class Path(BaseModel):
             return
             
         self.sections = []
-        straight_sections = []  # Will store tuples of (start_idx, end_idx)
+        straight_sections: list[tuple[int, int]] = []  # [(start_idx, end_idx)]
         
         # First pass: identify straight sections
         current_start = 0
@@ -95,38 +95,74 @@ class Path(BaseModel):
         # Second pass: create sections from straight segments and paths between them
         last_end = 0
         for start, end in straight_sections:
-            # Add section for path between straight sections if it exists
+            # add section for path between straight sections if it exists
             if start > last_end:
-                between_grids = self.grids[last_end:start+1]  # Include start grid for connectivity
-                section_cost = self.total_cost * (len(between_grids) / len(self.grids))
-                between_section = Path(
-                    grids=between_grids,
+                between_grids = self.grids[last_end: start + 1] # include start grid for connectivity
+                
+                # if this section is less than 4 grids, add it to the previous section
+                if len(between_grids) < 4:
+                    if self.sections:
+                        prev_section = self.sections[-1]
+                        # add the grids to the previous section
+                        prev_section.grids.extend(between_grids[1:])
+                        prev_section.total_cost = self.total_cost * (len(prev_section.grids) / len(self.grids))
+                    else:
+                        straight_grids = between_grids + self.grids[start: end + 1]
+                        section_cost = self.total_cost * (len(straight_grids) / len(self.grids))
+                        straight_section = Path(
+                            grids=straight_grids,
+                            total_cost=section_cost,
+                            path_type="section-straight"
+                        )
+                        self.sections.append(straight_section)
+                        last_end = end
+                        continue
+                else:
+                    section_cost = self.total_cost * (len(between_grids) / len(self.grids))
+                    between_section = Path(
+                        grids=between_grids,
+                        total_cost=section_cost,
+                        path_type="section-curved"
+                    )
+                    self.sections.append(between_section)
+            
+            # before adding a new straight section, check if we can combine it with the previous section
+            # we need to add this check because of the code that combines sections of less than 4 grids with
+            # the previous section
+            if self.sections and self.sections[-1].path_type == "section-straight":
+                prev_section = self.sections[-1]
+                # add new grids to the previous section (excluding the first grid to avoid duplication)
+                straight_grids = self.grids[start: end + 1]
+                prev_section.grids.extend(straight_grids[1:])
+                prev_section.total_cost = self.total_cost * (len(prev_section.grids) / len(self.grids))
+            else:
+                straight_grids = self.grids[start: end + 1]
+                section_cost = self.total_cost * (len(straight_grids) / len(self.grids))
+                straight_section = Path(
+                    grids=straight_grids,
+                    total_cost=section_cost,
+                    path_type="section-straight"
+                )
+                self.sections.append(straight_section)
+                
+            last_end = end
+        
+        # add final section if there are remaining grids
+        if last_end < len(self.grids) - 1:
+            final_grids = self.grids[last_end:]
+            
+            if len(final_grids) < 4 and self.sections:
+                prev_section = self.sections[-1]
+                prev_section.grids.extend(final_grids[1:])
+                prev_section.total_cost = self.total_cost * (len(prev_section.grids) / len(self.grids))
+            else:
+                section_cost = self.total_cost * (len(final_grids) / len(self.grids))
+                final_section = Path(
+                    grids=final_grids,
                     total_cost=section_cost,
                     path_type="section-curved"
                 )
-                self.sections.append(between_section)
-            
-            # Add straight section
-            straight_grids = self.grids[start:end+1]
-            section_cost = self.total_cost * (len(straight_grids) / len(self.grids))
-            straight_section = Path(
-                grids=straight_grids,
-                total_cost=section_cost,
-                path_type="section-straight"
-            )
-            self.sections.append(straight_section)
-            last_end = end
-        
-        # Add final section if there are remaining grids
-        if last_end < len(self.grids) - 1:
-            final_grids = self.grids[last_end:]
-            section_cost = self.total_cost * (len(final_grids) / len(self.grids))
-            final_section = Path(
-                grids=final_grids,
-                total_cost=section_cost,
-                path_type="section-curved"
-            )
-            self.sections.append(final_section)
+                self.sections.append(final_section)
         
     def _detect_corners(self) -> None:
         """

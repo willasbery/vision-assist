@@ -51,9 +51,8 @@ for path in grids:
         cv2.circle(frame, (x + (grid_size // 2), y + (grid_size // 2)), 5, (255, 255, 255), -1)
         cv2.putText(frame, f"{corner.direction}: {corner.sharpness} @ {corner.angle_change}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-
-
-
+    
+    frame = cv2.resize(frame, (576, 1024), interpolation=cv2.INTER_NEAREST)
     cv2.imshow("Path", frame)
     cv2.waitKey(0)
     
