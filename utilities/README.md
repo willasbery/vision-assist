@@ -36,13 +36,13 @@ $ vision-assist>
 Run this command now:
 
 ```bash
-$ vision-assist> python ./utilities/testing_main.py <name_of_testing_case> \--input-dir ./utilities/examples
+$ vision-assist> python ./utilities/testing_main.py <name_of_testing_case> --input-dir ./utilities/examples
 ```
 
 Here is an example from the test cases in the examples folder:
 
 ```bash
-$ vision-assist> python ./utilities/testing_main.py insane_case \--input-dir ./utilities/examples
+$ vision-assist> python ./utilities/testing_main.py insane_case --input-dir ./utilities/examples
 ```
 
 ### Starting the Grid drawing file
