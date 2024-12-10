@@ -7,7 +7,7 @@ from ultralytics import YOLO
 from config import grid_size
 from models import Grid, Coordinate, Path
 from PathFinder import path_finder
-from PathAnalyser import path_analyser
+from PathVisualiser import path_visualiser
 from PenaltyCalculator import penalty_calculator
 from ProtrusionDetector import ProtrusionDetector
 from utils import get_closest_grid_to_point
@@ -104,7 +104,7 @@ class FrameProcessor:
                     print("No grids were added for the mask.")
                     continue
                          
-                starting_y = int(self.frame.shape[0] * 0.8) + (grid_size - int(self.frame.shape[0] * 0.8) % grid_size)
+                starting_y = int(self.frame.shape[0] * 0.8375) + (grid_size - int(self.frame.shape[0] * 0.8375) % grid_size)
                 
                 for i in range (starting_y, self.frame.shape[0], grid_size):
                     row_count = (i - y) // grid_size
@@ -313,6 +313,6 @@ class FrameProcessor:
         self._draw_non_path_grids()
         
         # Use PathAnalyser to visualize paths
-        self.frame = path_analyser(self.frame, paths)
+        self.frame = path_visualiser(self.frame, paths)
         
         return self.frame

@@ -6,19 +6,17 @@ from config import grid_size
 from models import Corner, PathColours, Path
 
 
-class PathAnalyser:
-    _instance: ClassVar[Optional['PathAnalyser']] = None
+class PathVisualiser:
+    _instance: ClassVar[Optional['PathVisualiser']] = None
     _initialized: bool = False
    
     PATH_COLORS = [
-        PathColours(close=(0, 255, 0), mid=(0, 200, 0), far=(0, 150, 0)),  # Green variants
-        PathColours(close=(255, 0, 0), mid=(200, 0, 0), far=(150, 0, 0)),  # Red variants
         PathColours(close=(0, 0, 255), mid=(0, 0, 200), far=(0, 0, 150)),  # Blue variants
-        PathColours(close=(255, 255, 0), mid=(200, 200, 0), far=(150, 150, 0))  # Yellow variants
+        PathColours(close=(255, 0, 0), mid=(200, 0, 0), far=(150, 0, 0)),  # Red variants
     ]
    
     def __new__(cls):
-        """Ensure only one instance of PathAnalyser exists."""
+        """Ensure only one instance of PathVisualiser exists."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -45,53 +43,29 @@ class PathAnalyser:
     
     def _draw_corner_marker(self, section_idx: int, corner: Corner, path: Path) -> None:
         """Draw a corner marker and label at the corner location."""
-        # Retrieve the section where the corner is detected
-        # section = path.sections[section_idx]
-
-        # # Calculate the midpoint of the section to position the marker
-        # corner_x = (section.start.x + section.end.x) // 2
-        # corner_y = (section.start.y + section.end.y) // 2
-
-        # # Define marker properties
-        # marker_size = 10
-        # marker_color = (255, 255, 255)  # Yellow
-
-        # # Draw the corner marker
-        # cv2.drawMarker(
-        #     self.frame,
-        #     (corner_x, corner_y),
-        #     marker_color,
-        #     cv2.MARKER_DIAMOND,
-        #     marker_size,
-        #     2
-        # )
-
-        # # Prepare corner information text
-        # corner_text = (
-        #     f"{corner.type.capitalize()} {corner.sharpness.capitalize()} "
-        #     f"{corner.angle_change:.1f} Conf: {corner.confidence:.2f}"
-        # )
-
-        # # Draw the corner information text
-        # cv2.putText(
-        #     self.frame,
-        #     corner_text,
-        #     (corner_x, corner_y - 10),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     1,
-        #     marker_color,
-        #     2,
-        #     cv2.LINE_AA
-        # )
-        pass
+        cv2.circle(self.frame, (corner.start.x + 10, corner.start.y + 10), 5, (255, 255, 255), -1)
+        cv2.circle(self.frame, (corner.end.x + 10, corner.end.y + 10), 5, (255, 255, 255), -1)
+        cv2.putText(
+            self.frame,
+            f"{section_idx + 1}",
+            (corner.end.x + 5, corner.end.y - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            2
+        )   
+        
    
-    def _draw_path_sections(self, path: Path, path_colors: PathColours, path_idx: int) -> None:
+    def _draw_path_sections(self, path: Path, path_idx: int) -> None:
         """Draw path sections with measurements and corner detection."""
         if not path.sections:
             return
        
         # Draw grids for each section
         for i, section in enumerate(path.sections):
+            # Alternate between blue and red colors for each section
+            path_colors = self.PATH_COLORS[i % 2]
+            
             # Calculate color based on section position
             section_progress = i / len(path.sections)
             if section_progress < 0.33:
@@ -124,11 +98,10 @@ class PathAnalyser:
         self.paths = paths
        
         for idx, path in enumerate(self.paths):
-            path_colors = self.PATH_COLORS[idx % len(self.PATH_COLORS)]
-            self._draw_path_sections(path, path_colors, idx)
+            self._draw_path_sections(path, idx)
                
         return self.frame
 
 
 # Create singleton for export
-path_analyser = PathAnalyser()
+path_visualiser = PathVisualiser()
