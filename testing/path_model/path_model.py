@@ -4,67 +4,7 @@ import numpy as np
 from pydantic import BaseModel, computed_field
 from typing import Literal, Any
 
-
-class Coordinate(BaseModel):
-    x: int
-    y: int
-    
-    def to_tuple(self) -> tuple[int, int]:
-        return (self.x, self.y)
-
-class Grid(BaseModel):
-    coords: Coordinate
-    centre: Coordinate
-    penalty: float | None # is None when the grid is empty
-    row: int
-    col: int
-    empty: bool
-    artificial: bool
-    
-class Peak(BaseModel):
-    centre: Coordinate
-    left: Coordinate | None = None
-    right: Coordinate | None = None
-    orientation: Literal["left", "right", "up"] 
-    
-class ConvexityDefect(BaseModel):
-    start: Coordinate
-    end: Coordinate
-    far: Coordinate
-    depth: float
-    
-    @computed_field
-    @property
-    def angle_degrees(self) -> float:
-        v1 = np.array(self.start.to_tuple()) - np.array(self.far.to_tuple())
-        v2 = np.array(self.end.to_tuple()) - np.array(self.far.to_tuple())
-        angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-        return np.degrees(angle) 
-    
-class Corner(BaseModel):
-    direction: Literal["left", "right"]
-    sharpness: Literal["sharp", "sweeping"]
-    start: Coordinate # TODO: change to a grid?
-    end: Coordinate # TODO: change to a grid?
-    angle_change: float
-    
-class Obstacle(BaseModel):
-    type: Literal["left", "right", "forward_instruct_left", "forward_instruct_right"]
-    bbox: tuple[int, int, int, int] # x, y, w, h
-    distance: float
-    angle: float
-    confidence: float
-    
-    @property
-    def centre(self) -> tuple[int, int]:
-        x, y, w, h = self.bbox
-        return (x + w // 2, y + h // 2)
-    
-class PathColours(BaseModel):
-    close: tuple[int, int, int]
-    mid: tuple[int, int, int]
-    far: tuple[int, int, int]
-
+from other_models import Grid, Coordinate, Corner, Obstacle
 
 class Path(BaseModel):
     """

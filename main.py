@@ -87,7 +87,9 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
             processed_frame = None
             while processed_frame is None:
                 processed_frame = processor(frame)
-                cv2.imshow("Processed Frame", processed_frame)
+                resized_processed_frame = cv2.resize(processed_frame, (576, 1024))
+                
+                cv2.imshow("Processed Frame", resized_processed_frame)
                 cv2.waitKey(1)
                 
                 if isinstance(processed_frame, bool) and not processed_frame:

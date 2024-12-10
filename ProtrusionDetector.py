@@ -28,6 +28,9 @@ class ProtrusionDetector:
             self.height: int = 0
             self.width: int = 0
             self.binary: np.ndarray | None = None
+            
+            # For debug image
+            self.frames_processed = 0
         
     def _create_binary_image(self) -> np.ndarray:
         binary = np.zeros((self.height, self.width), dtype=np.uint8)
@@ -51,10 +54,10 @@ class ProtrusionDetector:
         return cv2.threshold(binary, 127, 255, cv2.THRESH_BINARY)[1]
     
     def _find_peak(
-    self, 
-    defect_centre: Coordinate | None = None, 
-    region_around_protrusion: np.ndarray | None = None
-) -> list[Peak] | None:
+        self, 
+        defect_centre: Coordinate | None = None, 
+        region_around_protrusion: np.ndarray | None = None
+    ) -> list[Peak] | None:
         """
         Find the peak of a path and determine its orientation.
         A peak is considered to be pointing upward if it meets certain geometric criteria.
@@ -119,28 +122,28 @@ class ProtrusionDetector:
             left = Coordinate(x=int(group[0]) + x_offset, y=int(min_y) + y_offset)
             right = Coordinate(x=int(group[-1]) + x_offset, y=int(min_y) + y_offset)
             
-            # Debug visualization
-            if region_around_protrusion is not None:
-                debug_img = region.copy()
-                # Convert to local coordinates for visualization
-                local_centre = Coordinate(x=centre_x, y=int(min_y))
-                local_left = Coordinate(x=int(group[0]), y=int(min_y))
-                local_right = Coordinate(x=int(group[-1]), y=int(min_y))
+            # # Debug visualization
+            # if region_around_protrusion is not None:
+            #     debug_img = region.copy()
+            #     # Convert to local coordinates for visualization
+            #     local_centre = Coordinate(x=centre_x, y=int(min_y))
+            #     local_left = Coordinate(x=int(group[0]), y=int(min_y))
+            #     local_right = Coordinate(x=int(group[-1]), y=int(min_y))
                 
-                cv2.circle(debug_img, local_centre.to_tuple(), 5, 255, -1)
-                cv2.circle(debug_img, local_left.to_tuple(), 3, 128, -1)
-                cv2.circle(debug_img, local_right.to_tuple(), 3, 128, -1)
-                cv2.putText(debug_img, orientation, (local_centre.x - 20, local_centre.y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1)
+            #     cv2.circle(debug_img, local_centre.to_tuple(), 5, 255, -1)
+            #     cv2.circle(debug_img, local_left.to_tuple(), 3, 128, -1)
+            #     cv2.circle(debug_img, local_right.to_tuple(), 3, 128, -1)
+            #     cv2.putText(debug_img, orientation, (local_centre.x - 20, local_centre.y - 10),
+            #                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1)
                 
-                # Draw vertical slice region
-                cv2.rectangle(debug_img, 
-                            (centre_x - slice_width//2, min_y),
-                            (centre_x + slice_width//2, np.max(vertical_slice_y)),
-                            128, 1)
+            #     # Draw vertical slice region
+            #     cv2.rectangle(debug_img, 
+            #                 (centre_x - slice_width//2, min_y),
+            #                 (centre_x + slice_width//2, np.max(vertical_slice_y)),
+            #                 128, 1)
 
-                cv2.imshow(f"Peak Analysis - {orientation}", debug_img)
-                cv2.waitKey(0)
+            #     cv2.imshow(f"Peak Analysis - {orientation}", debug_img)
+            #     cv2.waitKey(0)
             
             peaks.append(Peak(
                 centre=centre,
@@ -380,22 +383,52 @@ class ProtrusionDetector:
                 
         return protrusions
     
+    def create_debug_image(self) -> np.ndarray:
+        # Create RGB debug image
+        debug_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        
+        # Draw grids first
+        for grid_row in self.grids:
+            for grid in grid_row:
+                x, y = grid.coords.to_tuple()
+                corners = np.array([
+                    [x, y],
+                    [x + grid_size, y],
+                    [x + grid_size, y + grid_size],
+                    [x, y + grid_size]
+                ], np.int32)
+                
+                # Fill grid with color based on state
+                if grid.empty:
+                    color = (50, 50, 200)
+                elif grid.artificial:
+                    color = (50, 200, 50)
+                else:
+                    color = (200, 50, 50)
+                    
+                cv2.fillPoly(debug_image, [corners], color)
+                
+                # Draw grid borders in white
+                cv2.polylines(debug_image, [corners], True, (255, 255, 255), 1)
+                
+        return debug_image
+    
     def __call__(self, frame: np.ndarray, grids: list[list[Grid]], grid_lookup: dict[tuple[int, int], Grid]) -> list[Coordinate]:
         """
         Process a new frame to detect protrusions.
         
         Returns:
-            tuple: (list of protrusion coordinates, debug visualization image)
+            list: A list of protrusion coordinates
         """
         self.frame = frame
         self.grids = grids
         self.height, self.width = frame.shape[:2]
         self.binary = self._create_binary_image()
         
+        self.frames_processed += 1
+        
         # Create debug image (copy of original frame or blank canvas)
-        debug_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-        # Draw binary image in gray
-        debug_image[self.binary == 255] = [255, 255, 255]
+        debug_image = self.create_debug_image()
         
         # Find global peak
         global_peaks = self._find_peak()
@@ -413,8 +446,9 @@ class ProtrusionDetector:
         
         contour = max(contours, key=cv2.contourArea)
         
-        smooth_protrusions = self._detect_smooth_protrusions(contour)
-        protrusions.extend(smooth_protrusions)
+        # TODO: fix the smooth protrusions so they do not overfire
+        # smooth_protrusions = self._detect_smooth_protrusions(contour)
+        # protrusions.extend(smooth_protrusions)
             
         x, y, w, h = cv2.boundingRect(contour)
         
@@ -478,8 +512,12 @@ class ProtrusionDetector:
         cv2.putText(debug_image, "Far Points: Cyan", (10, legend_y + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
         cv2.putText(debug_image, "Protrusions: Red", (10, legend_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
         cv2.putText(debug_image, "Global Peak: Magenta", (10, legend_y + 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+        cv2.putText(debug_image, "Frames Processed: " + str(self.frames_processed), (10, legend_y + 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        cv2.imshow("Protrusion Detection", debug_image)
+        
+        resized_debug = cv2.resize(debug_image, (576, 1024), interpolation=cv2.INTER_AREA)
+        
+        cv2.imshow("Protrusion Detection", resized_debug)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         # END OF DEBUG

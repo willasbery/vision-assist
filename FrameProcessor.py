@@ -7,7 +7,7 @@ from ultralytics import YOLO
 from config import grid_size
 from models import Grid, Coordinate, Path
 from PathFinder import path_finder
-from PathAnalyser import path_analyser
+from PathVisualiser import path_visualiser
 from PenaltyCalculator import penalty_calculator
 from ProtrusionDetector import ProtrusionDetector
 from utils import get_closest_grid_to_point
@@ -33,8 +33,8 @@ class FrameProcessor:
             self.verbose = verbose
             
             self.frame: Optional[np.ndarray] = None
-            self.grids: list[list[Grid]] = []
-            self.grid_lookup: dict[tuple[int, int], Grid] = {}
+            self.grids: list[list[Grid]] = [] # 2d array of grids
+            self.grid_lookup: dict[tuple[int, int], Grid] = {} # (x, y) -> Grid mapping
             self.protrusion_detector = ProtrusionDetector()
             
     def _reject_blurry_frames(self, frame: np.ndarray) -> bool:
@@ -60,8 +60,18 @@ class FrameProcessor:
                 x = x - (x % grid_size)
                 y = y - (y % grid_size)
                 w = w + (grid_size - w % grid_size) if w % grid_size != 0 else w
+                w = self.frame.shape[1] if w > self.frame.shape[1] else w                
                 h = h + (grid_size - h % grid_size) if h % grid_size != 0 else h
                 
+                artifical_grid_column_xs = [
+                    x for x in range(
+                        (self.frame.shape[1] // 2) - (grid_size * 8), 
+                        (self.frame.shape[1] // 2) + (grid_size * (8 + 1)), grid_size
+                    )
+                ]
+                added_a_grid = False
+                    
+                # First create grids for the actual mask
                 row_count = 0
                 for i in range(y, y + h, grid_size):
                     col_count = 0
@@ -69,21 +79,69 @@ class FrameProcessor:
                     
                     for j in range(x, x + w, grid_size):
                         grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
+                        in_mask = cv2.pointPolygonTest(points, grid_centre.to_tuple(), False) >= 0
+                        
+                        if in_mask: added_a_grid = True
+                        
                         grid = Grid(
                             coords=Coordinate(x=j, y=i), 
                             centre=grid_centre, 
                             penalty=None, 
                             row=row_count, 
                             col=col_count, 
-                            empty=False if cv2.pointPolygonTest(points, grid_centre.to_tuple(), False) >= 0 else True
+                            empty=not in_mask,
+                            artificial=False
                         )
-                        
+                                                
                         this_row.append(grid)
                         self.grid_lookup[(j, i)] = grid
                         col_count += 1
                     
                     self.grids.append(this_row)
                     row_count += 1
+                    
+                if not added_a_grid:
+                    print("No grids were added for the mask.")
+                    continue
+                         
+                starting_y = int(self.frame.shape[0] * 0.8375) + (grid_size - int(self.frame.shape[0] * 0.8375) % grid_size)
+                
+                for i in range (starting_y, self.frame.shape[0], grid_size):
+                    row_count = (i - y) // grid_size
+                    this_row = []
+                 
+                    for j in range(x, x + w, grid_size):
+                        previously_empty = self.grid_lookup.get((j, i)).empty if self.grid_lookup.get((j, i)) else True
+                                    
+                        if previously_empty:
+                            if j in artifical_grid_column_xs:
+                                empty = False
+                                artificial = True
+                            else:
+                                empty = True
+                                artificial = False
+                        else:
+                            empty = False
+                            artificial = False
+                                
+                        grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))   
+                        grid = Grid(
+                            coords=Coordinate(x=j, y=i), 
+                            centre=grid_centre, 
+                            penalty=None, 
+                            row=row_count, 
+                            col=(j - x) // grid_size, 
+                            empty=empty,
+                            artificial=artificial
+                        ) 
+                                                     
+                        self.grid_lookup[(j, i)] = grid
+                        this_row.append(grid)
+                    
+                    if row_count < len(self.grids) - 1:
+                        self.grids[row_count] = this_row
+                    else:
+                        self.grids.append(this_row)
     
     def _calculate_penalties(self) -> None:
         """Calculate penalties for each grid."""
@@ -92,7 +150,7 @@ class FrameProcessor:
                 if grid.empty:
                     continue
                 
-                grid.penalty = penalty_calculator.calculate_row_penalty(grid, self.grids)
+                grid.penalty = penalty_calculator.calculate_penalty(grid, self.grid_lookup)
     
     def _create_graph(self) -> defaultdict:
         """Create a graph for A* pathfinding."""
@@ -146,22 +204,8 @@ class FrameProcessor:
         if not self.grids:
             return all_paths
             
-        # Find the start grid (middle grid in the bottom row)
-        bottom_row_grids = [grid for grid in self.grids[-1] if not grid.empty]
-        
-        # If bottom row is empty, look for the closest non-empty row from bottom
-        if not bottom_row_grids:
-            for row in reversed(self.grids[:-1]):
-                bottom_row_grids = [grid for grid in row if not grid.empty]
-                if bottom_row_grids:
-                    break
-            
-            if not bottom_row_grids:
-                print("No valid start position found - all rows are empty")
-                return all_paths
-        
-        # Select middle grid from the found row
-        start_grid = bottom_row_grids[(len(bottom_row_grids) - 1) // 2]
+        # Always start from the middle of the last row
+        start_grid = self.grids[-1][len(self.grids[-1]) // 2]
         
         for peak in protrusion_peaks:
             closest_grid = get_closest_grid_to_point(peak, self.grids)
@@ -269,6 +313,6 @@ class FrameProcessor:
         self._draw_non_path_grids()
         
         # Use PathAnalyser to visualize paths
-        self.frame = path_analyser(self.frame, paths)
+        self.frame = path_visualiser(self.frame, paths)
         
         return self.frame
