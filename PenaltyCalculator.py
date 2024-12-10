@@ -4,7 +4,6 @@ from config import grid_size, penalty_colour_gradient
 from models import Coordinate, Grid
 
 
-
 class PenaltyCalculator:
     """
     Handles the calculation and management of grid penalties.
@@ -113,6 +112,7 @@ class PenaltyCalculator:
             key=lambda x: abs(x - penalty),
         )
         return penalty_colour_gradient[closest_key]
+        # return (255, 255, 255)
 
 
 penalty_calculator = PenaltyCalculator()
