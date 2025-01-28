@@ -4,10 +4,17 @@ import numpy as np
 from pydantic import BaseModel, computed_field
 from typing import Literal, Any
 
+from config import grid_size
+
 
 class Coordinate(BaseModel):
     x: int
     y: int
+    
+    @computed_field
+    @property
+    def midpoint(self) -> tuple[int, int]:
+        return (self.x + (grid_size // 2), self.y + (grid_size // 2))
     
     def to_tuple(self) -> tuple[int, int]:
         return (self.x, self.y)
@@ -44,27 +51,15 @@ class ConvexityDefect(BaseModel):
 class Corner(BaseModel):
     direction: Literal["left", "right"]
     sharpness: Literal["sharp", "sweeping"]
-    start: Coordinate # TODO: change to a grid?
-    end: Coordinate # TODO: change to a grid?
+    shape: Literal["inner", "outer", "optimal"]
+    start: Coordinate
+    end: Coordinate
     angle_change: float
-    
-class Obstacle(BaseModel):
-    type: Literal["left", "right", "forward_instruct_left", "forward_instruct_right"]
-    bbox: tuple[int, int, int, int] # x, y, w, h
-    distance: float
-    angle: float
-    confidence: float
-    
-    @property
-    def centre(self) -> tuple[int, int]:
-        x, y, w, h = self.bbox
-        return (x + w // 2, y + h // 2)
     
 class PathColours(BaseModel):
     close: tuple[int, int, int]
     mid: tuple[int, int, int]
     far: tuple[int, int, int]
-
 
 class Path(BaseModel):
     """
@@ -77,13 +72,14 @@ class Path(BaseModel):
     sections: list[Path] | None = None  # a path section cannot have sections
     
     corners: list[Corner] | None = None  # a path section cannot have a corner 
-    obstacles: list[Obstacle] | None = None  # a path section cannot have obstacles
+    points: list[tuple[Coordinate, Coordinate]] | None = None
+    
+    test_data: dict = {}
     
     def model_post_init(self, __context: Any) -> None:
         if self.path_type == "path" and self.grids:  # only create sections for main path
             self._calculate_sections()
             self._detect_corners()
-            self._detect_obstacles()
     
     @computed_field
     @property
@@ -160,7 +156,7 @@ class Path(BaseModel):
                 between_grids = self.grids[last_end: start + 1] # include start grid for connectivity
                 
                 # if this section is less than 4 grids, add it to the previous section
-                if len(between_grids) < 4:
+                if len(between_grids) <= 4:
                     if self.sections:
                         prev_section = self.sections[-1]
                         # add the grids to the previous section
@@ -224,6 +220,33 @@ class Path(BaseModel):
                 )
                 self.sections.append(final_section)
         
+    def _get_closest_grid_to_point(self, point: Coordinate, grids: list[Grid]):
+        """
+        Get the closest grid to a point.
+        
+        Args:
+            point: The point to find the closest grid to
+            grids: The list of grids
+        
+        Returns:
+            The closest grid to the point    
+        """    
+        closest_grid: dict = None
+        min_distance = np.inf
+        
+        for grid in grids:
+            if grid.empty:
+                continue
+            
+            # Calculate euclidean distance
+            distance = np.sqrt((point.x - grid.centre.x) ** 2 + (point.y - grid.centre.y) ** 2)
+            
+            if distance < min_distance:
+                min_distance = distance
+                closest_grid = grid
+
+        return closest_grid
+        
     def _detect_corners(self) -> None:
         """
         Detect corners on a non-straight section
@@ -232,6 +255,14 @@ class Path(BaseModel):
             return
         
         self.corners = []
+        self.points = []
+        
+        for section in self.sections:
+            if section.start not in self.points:
+                self.points.append(section.start)
+            if section.end not in self.points:
+                self.points.append(section.end)
+                       
         
         for section in self.sections:
             # ignore straight sections
@@ -241,24 +272,45 @@ class Path(BaseModel):
             start_grid = section.grids[0]
             end_grid = section.grids[-1]
             
-            dx = end_grid.coords.x - start_grid.coords.x
-            dy = end_grid.coords.y - start_grid.coords.y
-            
+            dx = end_grid.centre.x - start_grid.centre.x
+            dy = end_grid.centre.y - start_grid.centre.y
             angle_change = abs(np.degrees(np.arctan2(dy, dx)))
             
+            direction = "right" if start_grid.centre.x - end_grid.centre.x < 0 else "left"
+            
+            midpoint = Coordinate(
+                x=start_grid.centre.x + (dx // 2),
+                y=start_grid.centre.y + (dy // 2) 
+            )
+        
+            nearest_grid = self._get_closest_grid_to_point(midpoint, section.grids)
+            euclidean_distance = np.hypot(abs(nearest_grid.centre.x - midpoint.x), abs(nearest_grid.centre.y - midpoint.y))
+    
+            # check if this nearest grid is to the left or right of the midpoint
+            dy_midpoint_nearest = nearest_grid.centre.y - midpoint.y
+            
+            # this threshold calculation is very basic rn, it can be improved massively
+            threshold = (np.hypot(dx, dy))**2 / (euclidean_distance + 1)**2
+            
+            if euclidean_distance < threshold:
+                shape = "optimal"
+            else:
+                shape = "inner" if dy_midpoint_nearest < 0 else "outer"
+                
             while angle_change > 90:
                 angle_change -= 90
             
             sharpness = "sharp" if angle_change > 45 else "sweeping"
             
             corner = Corner(
-                direction="right" if start_grid.coords.x - end_grid.coords.x < 0 else "left",
+                direction=direction,
                 sharpness=sharpness,
+                shape=shape,
                 start=start_grid.coords,
                 end=end_grid.coords,
-                angle_change=angle_change
+                angle_change=angle_change,
+                nearest_grid=nearest_grid,
+                midpoint=midpoint,
+                euclidean_distance=euclidean_distance
             )
             self.corners.append(corner)
-      
-    def _detect_obstacles(self) -> None:
-        pass
