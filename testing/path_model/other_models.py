@@ -1,10 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from typing import Literal
+
+grid_size = 20
 
 
 class Coordinate(BaseModel):
     x: int
     y: int
+    
+    @computed_field
+    @property
+    def midpoint(self) -> tuple[int, int]:
+        return (self.x + (grid_size // 2), self.y + (grid_size // 2))
     
     def to_tuple(self) -> tuple[int, int]:
         return (self.x, self.y)
@@ -16,22 +23,18 @@ class Grid(BaseModel):
     row: int
     col: int
     empty: bool
+    artificial: bool
     
 class Corner(BaseModel):
     direction: Literal["left", "right"]
     sharpness: Literal["sharp", "sweeping"]
+    shape: Literal["inner", "outer", "optimal"]
     start: Coordinate
     end: Coordinate
     angle_change: float
     
-class Obstacle(BaseModel):
-    type: Literal["left", "right", "forward_instruct_left", "forward_instruct_right"]
-    bbox: tuple[int, int, int, int] # x, y, w, h
-    distance: float
-    angle: float
-    confidence: float
+    #test data attributes
+    nearest_grid: Grid
+    midpoint: Coordinate
+    euclidean_distance: float
     
-    @property
-    def centre(self) -> tuple[int, int]:
-        x, y, w, h = self.bbox
-        return (x + w // 2, y + h // 2)
