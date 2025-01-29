@@ -208,7 +208,7 @@ class FrameProcessor:
             return all_paths
             
         # Always start from the middle of the last row
-        start_grid = self.grids[-1][len(self.grids[-1]) // 2]
+        start_grid = get_closest_grid_to_point(Coordinate(x=self.frame.shape[1] // 2, y=self.frame.shape[0]), self.grids)
         
         for peak in protrusion_peaks:
             closest_grid = get_closest_grid_to_point(peak, self.grids)
