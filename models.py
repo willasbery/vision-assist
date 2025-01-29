@@ -4,7 +4,7 @@ import numpy as np
 from pydantic import BaseModel, computed_field
 from typing import Literal, Any
 
-from config import grid_size
+from vision_assist.config import grid_size
 
 
 class Coordinate(BaseModel):

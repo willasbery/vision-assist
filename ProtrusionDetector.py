@@ -14,13 +14,14 @@ class ProtrusionDetector:
     _instance: ClassVar[Optional['ProtrusionDetector']] = None
     _initialized: bool = False
     
-    def __new__(cls, debug: bool):
+    def __new__(cls, debug: bool, imshow: bool):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance.debug = debug
+            cls._instance.imshow = imshow
         return cls._instance
     
-    def __init__(self, debug: bool):
+    def __init__(self, debug: bool, imshow: bool):
         """Initialize the detector only once."""
         if not self._initialized:
             self._initialized = True
@@ -125,27 +126,27 @@ class ProtrusionDetector:
             right = Coordinate(x=int(group[-1]) + x_offset, y=int(min_y) + y_offset)
             
             # Debug visualization
-            if self.debug is True and region_around_protrusion is not None:
+            if self.debug and self.imshow and region_around_protrusion is not None:
                 debug_img = region.copy()
                 # Convert to local coordinates for visualization
                 local_centre = Coordinate(x=centre_x, y=int(min_y))
                 local_left = Coordinate(x=int(group[0]), y=int(min_y))
                 local_right = Coordinate(x=int(group[-1]), y=int(min_y))
                 
-            #     cv2.circle(debug_img, local_centre.to_tuple(), 5, 255, -1)
-            #     cv2.circle(debug_img, local_left.to_tuple(), 3, 128, -1)
-            #     cv2.circle(debug_img, local_right.to_tuple(), 3, 128, -1)
-            #     cv2.putText(debug_img, orientation, (local_centre.x - 20, local_centre.y - 10),
-            #                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1)
+                cv2.circle(debug_img, local_centre.to_tuple(), 5, 255, -1)
+                cv2.circle(debug_img, local_left.to_tuple(), 3, 128, -1)
+                cv2.circle(debug_img, local_right.to_tuple(), 3, 128, -1)
+                cv2.putText(debug_img, orientation, (local_centre.x - 20, local_centre.y - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1)
                 
-            #     # Draw vertical slice region
-            #     cv2.rectangle(debug_img, 
-            #                 (centre_x - slice_width//2, min_y),
-            #                 (centre_x + slice_width//2, np.max(vertical_slice_y)),
-            #                 128, 1)
+                # Draw vertical slice region
+                cv2.rectangle(debug_img, 
+                            (centre_x - slice_width//2, min_y),
+                            (centre_x + slice_width//2, np.max(vertical_slice_y)),
+                            128, 1)
 
-            #     cv2.imshow(f"Peak Analysis - {orientation}", debug_img)
-            #     cv2.waitKey(0)
+                cv2.imshow(f"Peak Analysis - {orientation}", debug_img)
+                cv2.waitKey(0)
             
             peaks.append(Peak(
                 centre=centre,
@@ -502,21 +503,21 @@ class ProtrusionDetector:
         filtered_protrusions = self._filter_protrusions(protrusions, hull, global_peaks)
         
         # DEBUG
-        if self.debug:
+        if self.debug and self.imshow:
             # Add legend
             legend_y = 30
             # Draw global peak last so it's on top
             for global_peak in global_peaks:
                 cv2.circle(debug_image, (global_peak.centre.x, global_peak.centre.y), 8, (255, 0, 255), -1)  # magenta
                 
-            # cv2.putText(debug_image, "Binary Image: Gray", (10, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (128, 128, 128), 1)
-            # cv2.putText(debug_image, "Convex Hull: Green", (10, legend_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-            # cv2.putText(debug_image, "Quadrilateral: Blue", (10, legend_y + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-            # cv2.putText(debug_image, "Defect Points: Yellow", (10, legend_y + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-            # cv2.putText(debug_image, "Far Points: Cyan", (10, legend_y + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-            # cv2.putText(debug_image, "Protrusions: Red", (10, legend_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-            # cv2.putText(debug_image, "Global Peak: Magenta", (10, legend_y + 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
-            # cv2.putText(debug_image, "Frames Processed: " + str(self.frames_processed), (10, legend_y + 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_image, "Binary Image: Gray", (10, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (128, 128, 128), 1)
+            cv2.putText(debug_image, "Convex Hull: Green", (10, legend_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            cv2.putText(debug_image, "Quadrilateral: Blue", (10, legend_y + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+            cv2.putText(debug_image, "Defect Points: Yellow", (10, legend_y + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+            cv2.putText(debug_image, "Far Points: Cyan", (10, legend_y + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+            cv2.putText(debug_image, "Protrusions: Red", (10, legend_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            cv2.putText(debug_image, "Global Peak: Magenta", (10, legend_y + 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+            cv2.putText(debug_image, "Frames Processed: " + str(self.frames_processed), (10, legend_y + 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
             
             resized_debug = cv2.resize(debug_image, (576, 1024), interpolation=cv2.INTER_AREA)

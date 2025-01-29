@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 from typing import ClassVar, Optional
 
-from config import grid_size
-from models import Corner, PathColours, Path
+from vision_assist.config import grid_size
+from vision_assist.models import Corner, PathColours, Path
 
 
 class PathVisualiser:

@@ -21,23 +21,24 @@ class FrameProcessor:
     _instance: ClassVar[Optional['FrameProcessor']] = None
     _initialized: bool = False
     
-    def __new__(cls, model: YOLO, verbose: bool, debug: bool) -> 'FrameProcessor':  
+    def __new__(cls, model: YOLO, verbose: bool, debug: bool, imshow: bool) -> 'FrameProcessor':  
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self, model: YOLO, verbose: bool, debug: bool) -> None:
+    def __init__(self, model: YOLO, verbose: bool, debug: bool, imshow: bool) -> None:
         """Initialize the processor only once."""
         if not self._initialized:
             self._initialized = True
             self.model = model
             self.verbose = verbose
             self.debug = debug
+            self.imshow = imshow
             
             self.frame: Optional[np.ndarray] = None
             self.grids: list[list[Grid]] = [] # 2d array of grids
             self.grid_lookup: dict[tuple[int, int], Grid] = {} # (x, y) -> Grid mapping
-            self.protrusion_detector = ProtrusionDetector(debug=debug)
+            self.protrusion_detector = ProtrusionDetector(debug=debug, imshow=imshow)
             
     def _reject_blurry_frames(self, frame: np.ndarray) -> bool:
         """Reject blurry frames based on the Laplacian variance."""
