@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 
 from grids import grids
 from path_model import Path
@@ -29,11 +30,19 @@ for path in grids:
     frame = np.zeros((1280, 720, 3), dtype=np.uint8)
     frame[:] = (255, 255, 255)
     
+    start_time = time.time()
+    
     current_path = Path(
         grids=path,
         total_cost=100,
         path_type="path"
     )
+    
+    end_time = time.time()
+    print(f"Time taken to make path: {end_time - start_time} seconds")
+
+    cv2.putText(frame, f"{current_path.angle}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+    cv2.line(frame, (current_path.start.x, current_path.start.y), (current_path.end.x, current_path.end.y), (255, 0, 0), 2)
 
     # for grid in current_path.grids:
     #     _draw_grid(frame, grid, (255, 255, 255))
@@ -53,6 +62,7 @@ for path in grids:
         x, y = corner.start.to_tuple()
         cv2.circle(frame, (x + (grid_size // 2), y + (grid_size // 2)), 5, (0, 0, 0), -1)
         cv2.putText(frame, f"{corner.direction} & {corner.shape}: {corner.sharpness} @ {corner.angle_change}", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+        cv2.putText(frame, f"{corner.angle_change}", (x + 20, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
         cv2.circle(frame, (corner.midpoint.x, corner.midpoint.y), 5, (0, 0, 0), -1)
         
         _draw_grid(frame, corner.nearest_grid, (0, 0, 0))

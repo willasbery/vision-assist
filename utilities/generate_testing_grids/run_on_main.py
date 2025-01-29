@@ -11,7 +11,7 @@ from ultralytics import YOLO
 # Import your existing modules
 from models import Coordinate, Grid, Path
 from FrameProcessor import FrameProcessor
-from PathVisualiser import path_analyser
+from PathVisualiser import path_visualiser
 
 
 def setup_argparse() -> argparse.Namespace:
@@ -99,8 +99,9 @@ def convert_npy_to_grid_info(npy_path: str, grid_size: int = 20) -> tuple[list[l
         
         grids.append(this_row)
         row_count += 1
+        
     
-    starting_y = int(frame_height * 0.8) + (grid_size - int(frame_height * 0.8) % grid_size)
+    starting_y = int(frame_height * 0.8375) + (grid_size - int(frame_height * 0.8375) % grid_size)
     
     for i in range(starting_y, frame_height, grid_size):
         row_count = i // grid_size
@@ -172,6 +173,9 @@ class SingleSavedFrameFrameProcessor(FrameProcessor):
         # If using saved grids, skip detection and go straight to processing
         if not self.grids:
             return frame
+        
+        cv2.imwrite(f"generate_testing_grids/examples/outputs/grids_visualised_2_original.png", frame)
+        cv2.imshow("Original Frame", frame)
             
         # Calculate penalties for each grid
         self._calculate_penalties()
@@ -192,7 +196,7 @@ class SingleSavedFrameFrameProcessor(FrameProcessor):
         self._draw_non_path_grids()
         
         # Use PathAnalyser to visualize paths
-        self.frame = path_analyser(self.frame, paths)
+        # self.frame = path_visualiser(self.frame, paths)
         
         return self.frame
 
@@ -219,7 +223,7 @@ def main():
         processed_frame = frame_processor(frame)
         
         if isinstance(processed_frame, np.ndarray):
-            cv2.imwrite(f"utilities/examples/outputs/{args.base_filename}_processed.png", processed_frame)
+            cv2.imwrite(f"generate_testing_grids/examples/outputs/{args.base_filename}_processed.png", processed_frame)
             print("Saved processed frame to examples/outputs")
             processed_frame = cv2.resize(processed_frame, (576, 1024))
             # Display the processed frame
