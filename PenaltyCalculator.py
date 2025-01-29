@@ -99,7 +99,6 @@ class PenaltyCalculator:
         row_weight = 0.5 + (0.25 * dominance_factor if row_penalty > col_penalty else -0.25 * dominance_factor)
         col_weight = 1 - row_weight
         
-
         # Weighted average
         penalty = (row_penalty * row_weight) + (col_penalty * col_weight)        
 

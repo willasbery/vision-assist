@@ -47,7 +47,7 @@ class PathVisualiser:
         cv2.circle(self.frame, (corner.end.x + 10, corner.end.y + 10), 5, (255, 255, 255), -1)
         cv2.putText(
             self.frame,
-            f"{section_idx + 1} {corner.direction} {corner.sharpness}",
+            f"{section_idx + 1} {corner.direction} {corner.shape} {corner.sharpness}",
             (corner.end.x - 100, corner.end.y - 5),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,

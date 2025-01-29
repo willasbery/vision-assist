@@ -55,6 +55,16 @@ class Corner(BaseModel):
     start: Coordinate
     end: Coordinate
     angle_change: float
+    length: float
+    
+class Instruction(BaseModel):
+    direction: Literal["left", "right", "straight"]
+    danger: Literal["immediate", "high", "medium", "low"]
+    
+    distance: float  # distance in pixels/units to the turn
+    angle_change: float  # angle change in degrees
+    length: float  # length of the path segment in pixels/units
+    instruction_type: Literal["turn", "curve", "bearing"]
     
 class PathColours(BaseModel):
     close: tuple[int, int, int]
@@ -74,12 +84,42 @@ class Path(BaseModel):
     corners: list[Corner] | None = None  # a path section cannot have a corner 
     points: list[tuple[Coordinate, Coordinate]] | None = None
     
-    test_data: dict = {}
-    
     def model_post_init(self, __context: Any) -> None:
         if self.path_type == "path" and self.grids:  # only create sections for main path
             self._calculate_sections()
             self._detect_corners()
+            
+    @staticmethod
+    def _angle_from_vertical(start: Coordinate, end: Coordinate) -> float:
+        """
+        Calculate the angle of the path relative to a perfectly vertical line
+        passing through the starting x-coordinate.
+
+        Positive angle: end x > start x (path curves to the right)
+        Negative angle: end x < start x (path curves to the left)
+        """
+        x1, y1 = start.x, start.y
+        x2, y2 = end.x, end.y
+        x3, y3 = start.x, end.y
+        
+        v1 = (x2 - x1, y2 - y1)
+        v2 = (x3 - x1, y3 - y1)
+        
+        dot_product = v1[0] * v2[0] + v1[1] * v2[1]
+        magnitude_v1 = np.sqrt(v1[0]**2 + v1[1]**2)
+        magnitude_v2 = np.sqrt(v2[0]**2 + v2[1]**2)
+        
+        if magnitude_v1 == 0 or magnitude_v2 == 0:
+            return 0
+
+        angle_radians = np.acos(dot_product / (magnitude_v1 * magnitude_v2))
+        angle_degrees = np.degrees(angle_radians)
+        
+        # Make angle negative if end point is to the left of start point
+        if x2 < x1:
+            angle_degrees = -angle_degrees
+
+        return angle_degrees
     
     @computed_field
     @property
@@ -102,8 +142,7 @@ class Path(BaseModel):
 
     @property
     def angle(self) -> float:
-        angle = np.arctan2(self.end.y - self.start.y, self.end.x - self.start.x)
-        return np.degrees(angle)
+        return self._angle_from_vertical(self.start, self.end)
     
     @property
     def has_a_corner(self) -> bool:
@@ -112,7 +151,8 @@ class Path(BaseModel):
     def _calculate_sections(self) -> None:
         """
         Divide path into sections by identifying straight segments and the paths between them.
-        A straight segment is defined as 3 or more grids moving only horizontally or vertically.
+        A straight segment is defined as 3 or more grids moving only vertically.
+        Horizontal movements are always considered part of corners.
         """
         if not self.grids:
             return
@@ -120,7 +160,7 @@ class Path(BaseModel):
         self.sections = []
         straight_sections: list[tuple[int, int]] = []  # [(start_idx, end_idx)]
         
-        # First pass: identify straight sections
+        # First pass: identify straight sections (vertical only)
         current_start = 0
         last_direction = None
         straight_count = 1
@@ -132,11 +172,11 @@ class Path(BaseModel):
             dx = current_grid.coords.x - prev_grid.coords.x
             dy = current_grid.coords.y - prev_grid.coords.y
             
-            current_direction = "verticle" if dx == 0 and dy != 0 else \
-                                "horizontal" if dy == 0 and dx != 0 else None
+            # Only consider vertical movements for straight sections
+            current_direction = "vertical" if dx == 0 and dy != 0 else None
             last_direction = current_direction if i == 1 else last_direction
                 
-            if current_direction == last_direction:
+            if current_direction == last_direction == "vertical":
                 straight_count += 1
                 if straight_count >= 5 and i == len(self.grids) - 1:
                     straight_sections.append((current_start, i))
@@ -220,7 +260,8 @@ class Path(BaseModel):
                 )
                 self.sections.append(final_section)
         
-    def _get_closest_grid_to_point(self, point: Coordinate, grids: list[Grid]):
+    @staticmethod
+    def _get_closest_grid_to_point(point: Coordinate, grids: list[Grid]):
         """
         Get the closest grid to a point.
         
@@ -261,8 +302,7 @@ class Path(BaseModel):
             if section.start not in self.points:
                 self.points.append(section.start)
             if section.end not in self.points:
-                self.points.append(section.end)
-                       
+                self.points.append(section.end) 
         
         for section in self.sections:
             # ignore straight sections
@@ -272,10 +312,10 @@ class Path(BaseModel):
             start_grid = section.grids[0]
             end_grid = section.grids[-1]
             
+            angle_change = self._angle_from_vertical(start_grid.centre, end_grid.centre)
+            
             dx = end_grid.centre.x - start_grid.centre.x
             dy = end_grid.centre.y - start_grid.centre.y
-            angle_change = abs(np.degrees(np.arctan2(dy, dx)))
-            
             direction = "right" if start_grid.centre.x - end_grid.centre.x < 0 else "left"
             
             midpoint = Coordinate(
@@ -300,7 +340,7 @@ class Path(BaseModel):
             while angle_change > 90:
                 angle_change -= 90
             
-            sharpness = "sharp" if angle_change > 45 else "sweeping"
+            sharpness = "sharp" if angle_change > 30 else "sweeping"
             
             corner = Corner(
                 direction=direction,
@@ -309,8 +349,7 @@ class Path(BaseModel):
                 start=start_grid.coords,
                 end=end_grid.coords,
                 angle_change=angle_change,
-                nearest_grid=nearest_grid,
-                midpoint=midpoint,
-                euclidean_distance=euclidean_distance
+                length=section.length
             )
+            
             self.corners.append(corner)
