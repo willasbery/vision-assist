@@ -36,13 +36,13 @@ $ vision-assist>
 Run this command now:
 
 ```bash
-$ vision-assist> python ./utilities/testing_main.py <name_of_testing_case> --input-dir ./utilities/examples
+$ vision-assist> python ./utilities/generate_testing_grids/run_on_main.py <name_of_testing_case> --input-dir ./utilities/examples
 ```
 
 Here is an example from the test cases in the examples folder:
 
 ```bash
-$ vision-assist> python ./utilities/testing_main.py insane_case --input-dir ./utilities/examples
+$ vision-assist> python ./utilities/generate_testing_grids/run_on_main.py insane_case --input-dir ./utilities/examples
 ```
 
 ### Starting the Grid drawing file
@@ -50,13 +50,13 @@ $ vision-assist> python ./utilities/testing_main.py insane_case --input-dir ./ut
 Ensure you are in the utilities folder as it saves them in the examples Path relative to your CWD.
 
 ```bash
-cd ./utilities/
+cd ./utilities/generate_testing_grids/
 ```
 
 Run the utility using:
 
 ```bash
-python generate_testing_grids.py
+python utility.py
 ```
 
 ### Controls

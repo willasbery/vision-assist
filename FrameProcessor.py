@@ -5,7 +5,8 @@ from typing import ClassVar, Optional
 from ultralytics import YOLO
 
 from config import grid_size
-from models import Grid, Coordinate, Path
+from models import Coordinate, Grid, Instruction, Path
+from PathAnalyser import path_analyser
 from PathFinder import path_finder
 from PathVisualiser import path_visualiser
 from PenaltyCalculator import penalty_calculator
@@ -20,22 +21,23 @@ class FrameProcessor:
     _instance: ClassVar[Optional['FrameProcessor']] = None
     _initialized: bool = False
     
-    def __new__(cls, model: YOLO, verbose: bool) -> 'FrameProcessor':  
+    def __new__(cls, model: YOLO, verbose: bool, debug: bool) -> 'FrameProcessor':  
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self, model: YOLO, verbose: bool) -> None:
+    def __init__(self, model: YOLO, verbose: bool, debug: bool) -> None:
         """Initialize the processor only once."""
         if not self._initialized:
             self._initialized = True
             self.model = model
             self.verbose = verbose
+            self.debug = debug
             
             self.frame: Optional[np.ndarray] = None
             self.grids: list[list[Grid]] = [] # 2d array of grids
             self.grid_lookup: dict[tuple[int, int], Grid] = {} # (x, y) -> Grid mapping
-            self.protrusion_detector = ProtrusionDetector()
+            self.protrusion_detector = ProtrusionDetector(debug=debug)
             
     def _reject_blurry_frames(self, frame: np.ndarray) -> bool:
         """Reject blurry frames based on the Laplacian variance."""
@@ -104,7 +106,7 @@ class FrameProcessor:
                     print("No grids were added for the mask.")
                     continue
                          
-                starting_y = int(self.frame.shape[0] * 0.8375) + (grid_size - int(self.frame.shape[0] * 0.8375) % grid_size)
+                starting_y = int(self.frame.shape[0] * 0.875) + (grid_size - int(self.frame.shape[0] * 0.875) % grid_size)
                 
                 for i in range (starting_y, self.frame.shape[0], grid_size):
                     row_count = (i - y) // grid_size
@@ -267,7 +269,7 @@ class FrameProcessor:
         
         cv2.fillPoly(self.frame, [grid_corners], color)
     
-    def __call__(self, frame: np.ndarray) -> bool | np.ndarray:
+    def __call__(self, frame: np.ndarray) -> tuple[np.ndarray, list[Instruction]] | list[Instruction]:
         """
         Process a single frame with path detection and visualization.
         
@@ -276,13 +278,16 @@ class FrameProcessor:
             model: YOLO model instance
         
         Returns:
-            Processed frame with visualizations
+            Whatever it wants, whenever it wants, to whoever it wants
         """
         self.frame = frame
         
         # Check for blurry frames
         if self._reject_blurry_frames(frame):
-            return False
+            if self.debug:
+                return self.frame, []
+            else:
+                return []
                
         # Get YOLO results
         results = self.model.predict(frame, conf=0.5, verbose=self.verbose)
@@ -292,7 +297,10 @@ class FrameProcessor:
         
         # If no grids were found, return original frame
         if not self.grids:
-            return frame
+            if self.debug:
+                return self.frame, []
+            else:
+                return []
         
         # Calculate penalties for each grid
         self._calculate_penalties()
@@ -309,10 +317,15 @@ class FrameProcessor:
         # Find paths
         paths = self._find_paths(protrusion_peaks, graph)
         
-        # Draw non-path grids
-        self._draw_non_path_grids()
-        
-        # Use PathAnalyser to visualize paths
-        self.frame = path_visualiser(self.frame, paths)
-        
-        return self.frame
+        instructions = path_analyser(frame.shape[0], paths)
+  
+        if self.debug:
+            # Draw non-path grids
+            self._draw_non_path_grids()
+            
+            # Use PathAnalyser to visualize paths
+            self.frame = path_visualiser(self.frame, paths)
+            
+            return self.frame, instructions
+        else:
+            return instructions
