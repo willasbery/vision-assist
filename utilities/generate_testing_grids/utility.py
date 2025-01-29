@@ -3,31 +3,34 @@ import numpy as np
 import cv2
 import time
 import os
+from pathlib import Path
 
 # Set up constants
-SCREEN_WIDTH, SCREEN_HEIGHT = 720, 1280
-GRID_SIZE = 20
+DRAW_WIDTH, DRAW_HEIGHT = 360, 640
+SAVE_WIDTH, SAVE_HEIGHT = 720, 1280
+DRAW_GRID_SIZE = 10
+SAVE_GRID_SIZE = 20
 MIN_HOLD_TIME_MS = 10
 MAX_BRUSH_SIZE = 5
 EXAMPLES_DIR = "./examples"
 
-def create_grid_surface():
-    surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+def create_grid_surface(width, height, grid_size):
+    surface = pygame.Surface((width, height))
     surface.fill((0, 0, 0))
-    for x in range(0, SCREEN_WIDTH, GRID_SIZE):
-        for y in range(0, SCREEN_HEIGHT, GRID_SIZE):
-            pygame.draw.rect(surface, (100, 100, 100), (x, y, GRID_SIZE, GRID_SIZE), 1)
+    for x in range(0, width, grid_size):
+        for y in range(0, height, grid_size):
+            pygame.draw.rect(surface, (100, 100, 100), (x, y, grid_size, grid_size), 1)
     return surface
 
-def get_grid_position(mouse_x, mouse_y):
-    return (mouse_x // GRID_SIZE) * GRID_SIZE, (mouse_y // GRID_SIZE) * GRID_SIZE
+def get_grid_position(mouse_x, mouse_y, grid_size):
+    return (mouse_x // grid_size) * grid_size, (mouse_y // grid_size) * grid_size
 
-def get_affected_cells(grid_x, grid_y, brush_size, grid_shape):
+def get_affected_cells(grid_x, grid_y, brush_size, grid_shape, grid_size):
     cells = []
     offset = brush_size // 2
     
-    grid_index_x = grid_x // GRID_SIZE
-    grid_index_y = grid_y // GRID_SIZE
+    grid_index_x = grid_x // grid_size
+    grid_index_y = grid_y // grid_size
     
     for dy in range(-offset, offset + 1):
         for dx in range(-offset, offset + 1):
@@ -38,34 +41,55 @@ def get_affected_cells(grid_x, grid_y, brush_size, grid_shape):
     
     return cells
 
-def fill_cells(grid_surface, grid_filled, cells, fill_mode):
+def fill_cells(grid_surface, grid_filled, cells, fill_mode, grid_size):
     for grid_index_x, grid_index_y in cells:
-        grid_x = grid_index_x * GRID_SIZE
-        grid_y = grid_index_y * GRID_SIZE
+        grid_x = grid_index_x * grid_size
+        grid_y = grid_index_y * grid_size
         
         if grid_filled[grid_index_y, grid_index_x] != fill_mode:
             if fill_mode:
                 pygame.draw.rect(grid_surface, (255, 255, 255), 
-                               (grid_x, grid_y, GRID_SIZE, GRID_SIZE))
+                               (grid_x, grid_y, grid_size, grid_size))
             else:
                 pygame.draw.rect(grid_surface, (0, 0, 0), 
-                               (grid_x, grid_y, GRID_SIZE, GRID_SIZE))
+                               (grid_x, grid_y, grid_size, grid_size))
                 pygame.draw.rect(grid_surface, (100, 100, 100), 
-                               (grid_x, grid_y, GRID_SIZE, GRID_SIZE), 1)
+                               (grid_x, grid_y, grid_size, grid_size), 1)
             
             grid_filled[grid_index_y, grid_index_x] = fill_mode
+
+def scale_grid_for_saving(grid_filled):
+    # Create a larger grid for saving
+    save_grid = np.zeros((SAVE_HEIGHT // SAVE_GRID_SIZE, SAVE_WIDTH // SAVE_GRID_SIZE), dtype=bool)
+    
+    # Scale factor between draw and save grids
+    scale_x = save_grid.shape[1] / grid_filled.shape[1]
+    scale_y = save_grid.shape[0] / grid_filled.shape[0]
+    
+    # Map each cell from the drawing grid to the save grid
+    for y in range(grid_filled.shape[0]):
+        for x in range(grid_filled.shape[1]):
+            if grid_filled[y, x]:
+                save_x = int(x * scale_x)
+                save_y = int(y * scale_y)
+                save_grid[save_y, save_x] = True
+    
+    return save_grid
 
 def save_image_without_grid(grid_filled, filename_base):
     os.makedirs(EXAMPLES_DIR, exist_ok=True)
     
-    surface_no_grid = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    # Scale up the grid before saving
+    save_grid = scale_grid_for_saving(grid_filled)
+    
+    surface_no_grid = pygame.Surface((SAVE_WIDTH, SAVE_HEIGHT))
     surface_no_grid.fill((0, 0, 0))
 
-    for y in range(grid_filled.shape[0]):
-        for x in range(grid_filled.shape[1]):
-            if grid_filled[y, x]:
+    for y in range(save_grid.shape[0]):
+        for x in range(save_grid.shape[1]):
+            if save_grid[y, x]:
                 pygame.draw.rect(surface_no_grid, (255, 255, 255), 
-                               (x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE))
+                               (x * SAVE_GRID_SIZE, y * SAVE_GRID_SIZE, SAVE_GRID_SIZE, SAVE_GRID_SIZE))
 
     np_frame = pygame.surfarray.array3d(surface_no_grid).swapaxes(0, 1)
     image_filename = os.path.join(EXAMPLES_DIR, f"{filename_base}_img.png")
@@ -74,22 +98,38 @@ def save_image_without_grid(grid_filled, filename_base):
 
 def save_grid_data(grid_filled, filename_base):
     os.makedirs(EXAMPLES_DIR, exist_ok=True)
+    # Save the scaled up version
+    save_grid = scale_grid_for_saving(grid_filled)
     grid_filename = os.path.join(EXAMPLES_DIR, f"{filename_base}_grids.npy")
-    np.save(grid_filename, grid_filled)
+    np.save(grid_filename, save_grid)
     print(f"Grid data saved as {grid_filename}")
 
 def load_grid_data(filename_base):
     grid_filename = os.path.join(EXAMPLES_DIR, f"{filename_base}_grids.npy")
     try:
-        grid_filled = np.load(grid_filename)
-        return grid_filled
+        saved_grid = np.load(grid_filename)
+        # Scale down for drawing
+        draw_grid = np.zeros((DRAW_HEIGHT // DRAW_GRID_SIZE, DRAW_WIDTH // DRAW_GRID_SIZE), dtype=bool)
+        
+        scale_x = draw_grid.shape[1] / saved_grid.shape[1]
+        scale_y = draw_grid.shape[0] / saved_grid.shape[0]
+        
+        for y in range(saved_grid.shape[0]):
+            for x in range(saved_grid.shape[1]):
+                if saved_grid[y, x]:
+                    draw_x = int(x * scale_x)
+                    draw_y = int(y * scale_y)
+                    if draw_x < draw_grid.shape[1] and draw_y < draw_grid.shape[0]:
+                        draw_grid[draw_y, draw_x] = True
+        
+        return draw_grid
     except FileNotFoundError:
         print(f"Could not find file: {grid_filename}")
         return None
 
 def draw_text_centered(surface, text, font, color, y_offset=0):
     text_surface = font.render(text, True, color)
-    text_rect = text_surface.get_rect(center=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + y_offset))
+    text_rect = text_surface.get_rect(center=(DRAW_WIDTH/2, DRAW_HEIGHT/2 + y_offset))
     surface.blit(text_surface, text_rect)
 
 def get_saved_files():
@@ -163,10 +203,10 @@ def create_initial_grid_surface(grid_filled):
     for y in range(grid_filled.shape[0]):
         for x in range(grid_filled.shape[1]):
             if grid_filled[y, x]:
-                grid_x = x * GRID_SIZE
-                grid_y = y * GRID_SIZE
+                grid_x = x * DRAW_GRID_SIZE
+                grid_y = y * DRAW_GRID_SIZE
                 pygame.draw.rect(surface, (255, 255, 255), 
-                               (grid_x, grid_y, GRID_SIZE, GRID_SIZE))
+                               (grid_x, grid_y, DRAW_GRID_SIZE, DRAW_GRID_SIZE))
     return surface
 
 def get_filename_input():
@@ -182,10 +222,10 @@ def get_filename_input():
         input_surface.blit(text_surface, (10, 10))
         
         pygame.display.get_surface().fill((0, 0, 0))
-        pygame.display.get_surface().blit(input_surface, (SCREEN_WIDTH//2 - 200, SCREEN_HEIGHT//2 - 25))
+        pygame.display.get_surface().blit(input_surface, (DRAW_WIDTH//2 - 200, DRAW_HEIGHT//2 - 25))
         
         prompt_text = font.render("Enter filename base (press Enter when done):", True, (255, 255, 255))
-        pygame.display.get_surface().blit(prompt_text, (SCREEN_WIDTH//2 - 200, SCREEN_HEIGHT//2 - 60))
+        pygame.display.get_surface().blit(prompt_text, (DRAW_WIDTH//2 - 200, DRAW_HEIGHT//2 - 60))
         
         pygame.display.flip()
         
@@ -201,23 +241,34 @@ def get_filename_input():
                     if event.unicode.isalnum() or event.unicode in "-_":
                         current_text += event.unicode
 
+def create_initial_grid_surface(grid_filled):
+    surface = create_grid_surface(DRAW_WIDTH, DRAW_HEIGHT, DRAW_GRID_SIZE)
+    for y in range(grid_filled.shape[0]):
+        for x in range(grid_filled.shape[1]):
+            if grid_filled[y, x]:
+                grid_x = x * DRAW_GRID_SIZE
+                grid_y = y * DRAW_GRID_SIZE
+                pygame.draw.rect(surface, (255, 255, 255), 
+                               (grid_x, grid_y, DRAW_GRID_SIZE, DRAW_GRID_SIZE))
+    return surface
+
 def draw_brush_preview(screen, brush_size, mouse_pos):
-    preview_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-    grid_x, grid_y = get_grid_position(*mouse_pos)
-    offset = (brush_size // 2) * GRID_SIZE
+    preview_surface = pygame.Surface((DRAW_WIDTH, DRAW_HEIGHT), pygame.SRCALPHA)
+    grid_x, grid_y = get_grid_position(*mouse_pos, DRAW_GRID_SIZE)
+    offset = (brush_size // 2) * DRAW_GRID_SIZE
     
     preview_rect = pygame.Rect(
         grid_x - offset,
         grid_y - offset,
-        GRID_SIZE * brush_size,
-        GRID_SIZE * brush_size
+        DRAW_GRID_SIZE * brush_size,
+        DRAW_GRID_SIZE * brush_size
     )
     pygame.draw.rect(preview_surface, (255, 255, 255, 64), preview_rect)
     screen.blit(preview_surface, (0, 0))
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    screen = pygame.display.set_mode((DRAW_WIDTH, DRAW_HEIGHT))
     pygame.display.set_caption("Grid Drawing Utility")
     clock = pygame.time.Clock()
     
@@ -228,11 +279,11 @@ def main():
     if selected_file:
         grid_filled = load_grid_data(selected_file)
         if grid_filled is None:
-            grid_filled = np.zeros((SCREEN_HEIGHT // GRID_SIZE, SCREEN_WIDTH // GRID_SIZE), dtype=bool)
+            grid_filled = np.zeros((DRAW_HEIGHT // DRAW_GRID_SIZE, DRAW_WIDTH // DRAW_GRID_SIZE), dtype=bool)
         grid_surface = create_initial_grid_surface(grid_filled)
     else:
-        grid_filled = np.zeros((SCREEN_HEIGHT // GRID_SIZE, SCREEN_WIDTH // GRID_SIZE), dtype=bool)
-        grid_surface = create_grid_surface()
+        grid_filled = np.zeros((DRAW_HEIGHT // DRAW_GRID_SIZE, DRAW_WIDTH // DRAW_GRID_SIZE), dtype=bool)
+        grid_surface = create_grid_surface(DRAW_WIDTH, DRAW_HEIGHT, DRAW_GRID_SIZE)
     
     drawing = False
     last_mouse_down_time = 0
@@ -252,15 +303,15 @@ def main():
                     drawing = True
                     last_mouse_down_time = time.time() * 1000
                     mouse_x, mouse_y = pygame.mouse.get_pos()
-                    grid_x, grid_y = get_grid_position(mouse_x, mouse_y)
+                    grid_x, grid_y = get_grid_position(mouse_x, mouse_y, DRAW_GRID_SIZE)
                     
-                    grid_index_x = grid_x // GRID_SIZE
-                    grid_index_y = grid_y // GRID_SIZE
+                    grid_index_x = grid_x // DRAW_GRID_SIZE
+                    grid_index_y = grid_y // DRAW_GRID_SIZE
                     
                     if 0 <= grid_index_x < grid_filled.shape[1] and 0 <= grid_index_y < grid_filled.shape[0]:
                         fill_mode = not grid_filled[grid_index_y, grid_index_x]
-                        cells = get_affected_cells(grid_x, grid_y, brush_size, grid_filled.shape)
-                        fill_cells(grid_surface, grid_filled, cells, fill_mode)
+                        cells = get_affected_cells(grid_x, grid_y, brush_size, grid_filled.shape, DRAW_GRID_SIZE)
+                        fill_cells(grid_surface, grid_filled, cells, fill_mode, DRAW_GRID_SIZE)
                         
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:
@@ -279,14 +330,13 @@ def main():
 
         if drawing:
             mouse_x, mouse_y = pygame.mouse.get_pos()
-            grid_x, grid_y = get_grid_position(mouse_x, mouse_y)
-            cells = get_affected_cells(grid_x, grid_y, brush_size, grid_filled.shape)
-            fill_cells(grid_surface, grid_filled, cells, fill_mode)
+            grid_x, grid_y = get_grid_position(mouse_x, mouse_y, DRAW_GRID_SIZE)
+            cells = get_affected_cells(grid_x, grid_y, brush_size, grid_filled.shape, DRAW_GRID_SIZE)
+            fill_cells(grid_surface, grid_filled, cells, fill_mode, DRAW_GRID_SIZE)
 
         screen.blit(grid_surface, (0, 0))
         draw_brush_preview(screen, brush_size, mouse_pos)
         
-        # Draw brush size indicator and current file name
         brush_text = font.render(f"Brush Size: {brush_size}x{brush_size}", True, (255, 255, 255))
         screen.blit(brush_text, (10, 10))
         

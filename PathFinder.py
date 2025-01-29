@@ -47,36 +47,50 @@ class PathFinder:
 
     def _angle_between_grids(self, path: list[tuple[int, int]], segment_size: int) -> float:
         """
-        Calculate the average angle change over a segment of the path.
+        Calculate the angle changes over a sliding window of the path, considering
+        both previous and upcoming segments for smoother transitions.
 
         Args:
             path: List of grid coordinates (x, y) representing the path so far.
             segment_size: Number of grids to consider for angle calculation.
 
         Returns:
-            The average angle change across the segment.
+            The maximum angle change across the analyzed segments.
         """
-        if len(path) < 2 or segment_size < 2:
-            return 0  # No angle change if the path or segment is too short
+        if len(path) < segment_size:
+            return 0
 
         angles = []
-        for i in range(len(path) - segment_size):
-            p1, p2, p3 = path[i], path[i + segment_size // 2], path[i + segment_size - 1]
-            v1 = (p2[0] - p1[0], p2[1] - p1[1])
-            v2 = (p3[0] - p2[0], p3[1] - p2[1])
+        # Use a sliding window approach to analyze segments
+        half_segment = segment_size // 2
+        
+        for i in range(half_segment, len(path) - half_segment - 1):
+            # Get points before and after the current point
+            prev_points = path[i - half_segment:i + 1]
+            next_points = path[i:i + half_segment + 1]
+            
+            # Calculate direction vectors for both segments
+            prev_vector = (
+                prev_points[-1][0] - prev_points[0][0],
+                prev_points[-1][1] - prev_points[0][1]
+            )
+            next_vector = (
+                next_points[-1][0] - next_points[0][0],
+                next_points[-1][1] - next_points[0][1]
+            )
 
-            dot_product = v1[0] * v2[0] + v1[1] * v2[1]
-            magnitude_v1 = (v1[0]**2 + v1[1]**2)**0.5
-            magnitude_v2 = (v2[0]**2 + v2[1]**2)**0.5
+            # Calculate angle between vectors
+            dot_product = prev_vector[0] * next_vector[0] + prev_vector[1] * next_vector[1]
+            magnitude_prev = (prev_vector[0]**2 + prev_vector[1]**2)**0.5
+            magnitude_next = (next_vector[0]**2 + next_vector[1]**2)**0.5
 
-            if magnitude_v1 == 0 or magnitude_v2 == 0:
-                angles.append(180)  # Treat as straight line for degenerate vectors
+            if magnitude_prev == 0 or magnitude_next == 0:
                 continue
 
-            angle = np.arccos(np.clip(dot_product / (magnitude_v1 * magnitude_v2), -1.0, 1.0))
+            angle = np.arccos(np.clip(dot_product / (magnitude_prev * magnitude_next), -1.0, 1.0))
             angles.append(np.degrees(angle))
 
-        return np.mean(angles) if angles else 0
+        return max(angles) if angles else 0
 
     def _reconstruct_path(self, end_coords: tuple[int, int], start_grid: dict) -> tuple[list[dict], float]:
         """
@@ -139,12 +153,14 @@ class PathFinder:
                     path_so_far.append(previous)
                 path_so_far.reverse()
 
-                # Calculate angle penalty based on segments of the path
-                segment_size = max(2, len(path_so_far) // 10)  # At least 10% of the path or 2 grids
+                # Calculate angle penalty based on larger segments
+                segment_size = 7  # Consider 7 points: 3 before, current, and 3 after
                 avg_angle_change = self._angle_between_grids(path_so_far + [neighbour_coords], segment_size)
-                angle_penalty = 0 if avg_angle_change >= 120 else (120 - avg_angle_change) / 120  # Scale penalty
+                # More gradual penalty for angles
+                angle_penalty = 0 if avg_angle_change <= 30 else (avg_angle_change / 90) ** 1.5
 
-                penalty_multiplier = 1 + (neighbour_grid.penalty or 0) + angle_penalty
+                # Adjust penalty multiplier to be more lenient
+                penalty_multiplier = 1 + (0.5 * (neighbour_grid.penalty or 0)) + angle_penalty * 1.5
                 tentative_g_score = self._g_score[current_coords] + (distance * penalty_multiplier)
 
                 if (neighbour_coords not in self._g_score or
