@@ -1,11 +1,14 @@
 import argparse
 import cv2
+import numpy as np
 import time
 from pathlib import Path
 from ultralytics import YOLO
 
+from models import Instruction
 from FrameProcessor import FrameProcessor
 from MockCamera import MockCamera
+
 
 
 def parse_opt():
@@ -14,7 +17,8 @@ def parse_opt():
     parser.add_argument('--source', type=str, default='../videos/longer.MP4', help='video file path')
     parser.add_argument('--output', type=str, default="../results/", help='output directory')
     parser.add_argument('--process-fps', type=int, default=8, help='process frames per second')
-    parser.add_argument('--verbose', type=bool, default=False, help='print debug information')
+    parser.add_argument('--verbose', action='store_true', default=False, help='print debug information')
+    parser.add_argument('--debug', action='store_true', default=False, help='if debug enabled debug stuff happens')
     
     return parser.parse_args()
 
@@ -23,7 +27,8 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
          source: str | Path = '../videos/longer.MP4',
          output: str | Path = '../results/',
          process_fps: int = 8,
-         verbose: bool = False
+         verbose: bool = False,
+         debug: bool = False,
         ) -> None:
     """
     Main function to process the video and generate the output.
@@ -32,10 +37,13 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
         weights: Path to the weights file
         source: Path to the video file
         output: Output directory
+        
+    Returns:
+        Nish
     """
     # Initialize the model and frame processor
-    model = YOLO(f"{weights}")
-    processor = FrameProcessor(model=model, verbose=verbose)
+    model = YOLO(f"{weights}").to("cuda")
+    processor = FrameProcessor(model=model, verbose=verbose, debug=debug)
    
     # Mock camera for testing
     mock_cam = MockCamera(source, target_fps=30)
@@ -60,52 +68,60 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
             start_time = cv2.getTickCount()
             
             processed_frame = None
-            while processed_frame is None:
-                processed_frame = processor(frame)
+            instructions = None
+            
+            while processed_frame is None and instructions is None:
+                if debug:
+                    processed_frame, instructions = processor(frame)
+                else:
+                    instructions = processor(frame)
+                    processed_frame = frame  # Use original frame in non-debug mode
                 
-                if isinstance(processed_frame, bool) and not processed_frame:
+                if instructions is None:
                     frames_skipped += 1
                     if verbose:
                         print(f"Frame {frames_processed} was skipped as it was too blurry, trying next frame")
                     ret, frame = mock_cam.read()
                     if not ret:
                         break
-            
-            if processed_frame is None:
-                break
+
+            if processed_frame is None or instructions is None:
+                continue
                 
-            resized_processed_frame = cv2.resize(processed_frame, (576, 1024))
-            
-            # Display loop - stay on current frame until Enter is pressed
-            while True:
-                cv2.imshow("Processed Frame", resized_processed_frame)
-                key = cv2.waitKey(1) & 0xFF
-                
-                # 'S' key - save current frame
-                if key == ord('s'):
-                    frame_path = frames_dir / f"frame_{frames_processed:04d}_{save_counter:02d}.png"
-                    cv2.imwrite(str(frame_path), processed_frame)
-                    frames_saved += 1
-                    save_counter += 1
-                    if verbose:
-                        print(f"Saved frame to {frame_path}")
-                
-                # Enter key - proceed to next frame
-                elif key == 13:  # ASCII code for Enter
-                    save_counter = 0  # Reset save counter for new frame
-                    break
-                
-                # 'Q' key - quit program
-                elif key == ord('q'):
-                    raise KeyboardInterrupt
-            
             frames_processed += 1
             
+            if debug:
+                resized_processed_frame = cv2.resize(processed_frame, (576, 1024))
+                
+                # Display loop - stay on current frame until Enter is pressed
+                while True:
+                    cv2.imshow("Processed Frame", resized_processed_frame)
+                    key = cv2.waitKey(1) & 0xFF
+                    
+                    if key == ord('s'):
+                        frame_path = frames_dir / f"frame_{frames_processed:04d}_{save_counter:02d}.png"
+                        cv2.imwrite(str(frame_path), processed_frame)
+                        frames_saved += 1
+                        save_counter += 1
+                        if verbose:
+                            print(f"Saved frame to {frame_path}")
+                    
+                    elif key == 13:  # ASCII code for Enter
+                        save_counter = 0  # Reset save counter for new frame
+                        break
+                    
+                    elif key == ord('q'):
+                        raise KeyboardInterrupt
+
             end_time = cv2.getTickCount()
-            processing_time = (end_time - start_time) / cv2.getTickFrequency()
-            processing_times.append(processing_time)
-            print(f"Processing time: {processing_time} seconds")
             
+            processing_time = (end_time - start_time) / cv2.getTickFrequency()
+            # only append when we have outcomes, otherwise the processing time
+            # will be lower than the actual time it takes to process the frame
+            if instructions: processing_times.append(processing_time)
+            print(f"Instructions: {instructions}")
+            print(f"Processing time: {processing_time} seconds")
+
     except KeyboardInterrupt:
         if processing_times:
             avg_processing_time = sum(processing_times) / len(processing_times)

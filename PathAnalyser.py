@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import time
 from typing import ClassVar, Optional
@@ -8,6 +9,8 @@ from models import Path, Instruction
 # - sort out the calculations for determining danger level
 # - using event or processing time for previous instruction key vals?
 # - include previous instructions in instruction calculations?
+# - implement _analyse_paths?
+# - implement _analyse_previous_instructions?
 
 class PathAnalyser:
     _instance: ClassVar[Optional['PathAnalyser']] = None
@@ -25,10 +28,8 @@ class PathAnalyser:
             self._initialized = True
             self.paths: list[Path] = []
             
-            # previous instructions are stored in a dictionary with the timestamp of the instruction
-            # IDEALLY, we would also know how far the user has moved since the last instruction, but
-            # I'm not sure how easy this will be to do just yet
-            self.previous_instructions: dict[float, list[Instruction]] = []
+            # Convert timestamp to milliseconds (int) for dictionary keys
+            self.previous_instructions: dict[int, list[Instruction]] = {}
             self.instructions: list[Instruction] = []
 
     def _analyse_path(self, path: Path) -> Instruction | None:
@@ -144,6 +145,7 @@ class PathAnalyser:
         Returns:
             list[Instruction]: A list of instructions for the application to understand
         """
+        # TODO: implement
         return instructions
     
     def _analyse_previous_instructions(
@@ -161,6 +163,7 @@ class PathAnalyser:
         Returns:
             list[Instruction]: An updated list of instructions, enriched by previous instructions
         """
+        # TODO: implement
         return current_instructions
 
     def __call__(self, frame_height: int, paths: list[Path]) -> list[Path]:
@@ -179,8 +182,8 @@ class PathAnalyser:
         
         self.instructions = []
         
-        # TODO: determine if we want event or processing time - if event we need to take from phone
-        processing_time = time.time()
+        # Convert to milliseconds for integer key
+        processing_time = int(time.time() * 1000)
         
         for path in self.paths:
             path_instruction = self._analyse_path(path)
@@ -195,7 +198,8 @@ class PathAnalyser:
         
         # Sort first by instruction type (bearing last), then by danger level
         def sort_key(instruction):
-            type_order = {'turn': 0, 'curve': 0, 'bearing': 1}
+            # turn and curve are of same importance
+            type_order = {'turn': 0, 'curve': 0, 'bearing': 1} 
             danger_order = {'immediate': 0, 'high': 1, 'medium': 2, 'low': 3}
             
             return (
@@ -212,18 +216,15 @@ class PathAnalyser:
         # danger is increasing, we should definitely instruct the user to move
         self.previous_instructions[processing_time] = self.instructions
         
-        # Remove any previous instructions that are more than 5s before the current processing time
-        # For two reasons:
-        #   1. want to keep the size as small as possible
-        #   2. no point keeping out of date instructions
-        # Only issue I can see here is if the user is stood still but it would be hard to determine that
+        # Remove any instructions from more than 5s ago
         self.previous_instructions = {
             timestamp: instructions 
             for timestamp, instructions in self.previous_instructions.items()
-            if processing_time - timestamp <= 5
+            if processing_time - timestamp <= 5000
         }
         
-        return self.instructions
+        # Return as JSON so they can be easily interpreted by the FE
+        return json.dumps([instruction.model_dump() for instruction in self.instructions])
 
 
 # Create singleton for export
