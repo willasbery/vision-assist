@@ -69,6 +69,8 @@ class PathAnalyser:
             direction=direction,
             danger=danger,
             distance=length,
+            start=path.start,
+            end=path.end,
             angle_change=angle,
             length=length,
             instruction_type=instruction_type
@@ -126,6 +128,8 @@ class PathAnalyser:
                 direction=corner.direction,
                 danger=danger,
                 distance=distance,
+                start=corner.start,
+                end=corner.end,
                 angle_change=corner.angle_change,
                 length=corner.length,
                 instruction_type="turn" if corner.sharpness == "sharp" else "curve"
@@ -150,8 +154,9 @@ class PathAnalyser:
     
     def _analyse_previous_instructions(
         self, 
-        previous_instructions: list[Instruction], 
-        current_instructions: list[Instruction]
+        previous_instructions: dict[int, list[Instruction]], 
+        current_instructions: list[Instruction],
+        current_timestamp: int
     ) -> list[Instruction]:
         """
         Analyse the previous instructions and use it to enrich the current instruction.
@@ -163,10 +168,120 @@ class PathAnalyser:
         Returns:
             list[Instruction]: An updated list of instructions, enriched by previous instructions
         """
-        # TODO: implement
+        danger_mapping = {
+            "immediate": 0,
+            "high": 1,
+            "medium": 2,
+            "low": 3
+        }
+
+        # Analyse the previous instructions sent
+        if not previous_instructions:
+            return current_instructions
+        
+        # Try to pair each previous instruction with a current instruction
+        # There can be a many to one relationship between previous and current instructions
+        pairs = []
+        # 1.5s is the maximum time we will wait for an instruction to be paired, assuming we run at 2fps
+        acceptable_time_difference = 1500
+        
+        for previous_timestamp, previous_instruction_list in previous_instructions.items():
+            for previous_instruction in previous_instruction_list:
+                for current_instruction in current_instructions:
+                    # We should only ever pair a bearing with a bearing
+                    if previous_instruction.instruction_type == "bearing" and current_instruction.instruction_type != "bearing":
+                        continue
+                    
+                    # If the previous instruction is closer than the current instruction, skip
+                    if previous_instruction.distance > current_instruction.distance:
+                        continue
+                    
+                    # If the previous instruction is in a different direction, skip
+                    if previous_instruction.direction != current_instruction.direction:
+                        continue
+                    
+                    time_difference = current_timestamp - previous_timestamp
+                    
+                    y_difference = abs(previous_instruction.start.y - current_instruction.start.y)
+                    # Adjust for the fact that the closer to the bottom of the frame we are, the more lenient we are
+                    y_multiplier = (previous_instruction.start.y / self.frame_height)
+                    # If the time difference is too much, or we have moved too much vertically,
+                    # then we should not pair them together
+                    y_acceptable = time_difference < acceptable_time_difference and (y_difference * y_multiplier) < self.frame_height * 0.2 
+                    if not y_acceptable: continue
+                    
+                    x_difference = abs(previous_instruction.start.x - current_instruction.start.x)
+                    # Adjust for the fact that the closer to the bottom of the frame we are, the more lenient we are
+                    # Still use the y value as the user is expected to move in the y direction
+                    x_multiplier = (previous_instruction.start.y / self.frame_height)
+                    # If the time difference is too much, or we have moved too much horizontally,
+                    x_acceptable = time_difference < acceptable_time_difference and (x_difference * x_multiplier) < self.frame_width * 0.2 
+                    if not x_acceptable: continue
+                    
+                    # If the danger level of the previous instruction is greater than the current instruction,
+                    # Then we should not pair them together because the danger level has gone down, howvever, if the danger
+                    # level has stayed the same, or increased, then we should pair them together
+                    if danger_mapping[previous_instruction.danger] - danger_mapping[current_instruction.danger] > 0:
+                        continue
+                    
+                    pairs.append((previous_instruction, current_instruction, {"time_difference": time_difference, "y_difference": y_difference, "x_difference": x_difference}))
+
+
+        # Now we can interate over every pair and determine if the current instruction should be enriched
+        for previous_instruction, current_instruction, metadata in pairs:
+            time_difference = metadata["time_difference"]
+            y_difference = metadata["y_difference"]
+            x_difference = metadata["x_difference"]
+            direction_change = abs(previous_instruction.angle_change - current_instruction.angle_change)
+            
+            # If the current instruction is a bearing, we should only enrich it if there is a significant change in direction,
+            # don't care about the time difference or distance in this case
+            if current_instruction.instruction_type == "bearing":
+                match current_instruction.danger:
+                    case "high":
+                        if direction_change > 12.5:
+                            current_instruction.danger = "immediate"
+                            print(f"Bearing danger increased to immediate: {current_instruction.model_dump()}")
+                    case "medium":
+                        if direction_change > 7.5:
+                            current_instruction.danger = "high"
+                            print(f"Bearing danger increased to high: {current_instruction.model_dump()}")
+                    case "low":
+                        if direction_change > 3.75:
+                            current_instruction.danger = "medium"
+                            print(f"Bearing danger increased to medium: {current_instruction.model_dump()}")
+                    case _:
+                        pass    
+            else:
+                match current_instruction.danger:
+                    case "high":
+                        if direction_change > 15:
+                            current_instruction.danger = "immediate"
+                            print(f"Bearing danger increased to immediate: {current_instruction.model_dump()}")
+                    case "medium":
+                        if direction_change > 10:
+                            current_instruction.danger = "high"
+                            print(f"Bearing danger increased to high: {current_instruction.model_dump()}")
+                    case "low":
+                        if direction_change > 7.5:
+                            current_instruction.danger = "medium"
+                            print(f"Bearing danger increased to medium: {current_instruction.model_dump()}")        
+                    case _:
+                        pass
+            
+        # Now remove any instructions which are too far away, or low in danger, DO NOT REMOVE BEARINGS
+        for instruction in current_instructions:
+            if instruction.instruction_type != "bearing":
+                if instruction.danger == "low":
+                    current_instructions.remove(instruction)
+                # If they are in the top 33% of the frame, we should remove them
+                elif instruction.distance < self.frame_height * 0.33:
+                    current_instructions.remove(instruction)
+
         return current_instructions
 
-    def __call__(self, frame_height: int, paths: list[Path]) -> list[Path]:
+    def __call__(self, frame_height: int, frame_width: int, paths: list[Path]) -> list[Path]:
+
         """
         Process and analyse the paths.
         
@@ -179,6 +294,7 @@ class PathAnalyser:
         """
         self.paths = paths
         self.frame_height = frame_height
+        self.frame_width = frame_width
         
         self.instructions = []
         
@@ -207,14 +323,23 @@ class PathAnalyser:
                 danger_order[instruction.danger]
             )
             
-        self.instructions = sorted(self.instructions, key=sort_key)
+        self.unfiltered_instructions = sorted(self.instructions, key=sort_key)
+        # print("Instructions before analysis with previous instructions:")
+        # print(json.dumps([instruction.model_dump() for instruction in self.instructions], indent=4))
         
-        self.instructions = self._analyse_previous_instructions(self.previous_instructions, self.instructions)
+        self.filtered_instructions = self._analyse_previous_instructions(self.previous_instructions, self.instructions, processing_time)
+        # print(f"Instructions after analysis with previous instructions: {self.filtered_instructions}\n")
+        # print(json.dumps([instruction.model_dump() for instruction in self.filtered_instructions], indent=4))
         
+        # print(f"Previous instructions were:")
+        # for timestamp, instructions in self.previous_instructions.items():
+        #     print(f"Timestamp: {timestamp}")
+        #     print(json.dumps([instruction.model_dump() for instruction in instructions], indent=4))
+
         # TODO: process this in relation to previous instructions?
         # say, if we have three frames in a row where the instruction is turn right and the 
         # danger is increasing, we should definitely instruct the user to move
-        self.previous_instructions[processing_time] = self.instructions
+        self.previous_instructions[processing_time] = self.unfiltered_instructions
         
         # Remove any instructions from more than 5s ago
         self.previous_instructions = {
@@ -224,7 +349,7 @@ class PathAnalyser:
         }
         
         # Return as JSON so they can be easily interpreted by the FE
-        return json.dumps([instruction.model_dump() for instruction in self.instructions])
+        return json.dumps([instruction.model_dump() for instruction in self.filtered_instructions])
 
 
 # Create singleton for export

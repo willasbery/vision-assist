@@ -317,7 +317,7 @@ class FrameProcessor:
         # Find paths
         paths = self._find_paths(protrusion_peaks, graph)
         
-        instructions = path_analyser(frame.shape[0], paths)
+        instructions = path_analyser(frame.shape[0], frame.shape[1], paths)
   
         if self.debug:
             # Draw non-path grids

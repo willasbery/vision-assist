@@ -61,11 +61,13 @@ class Instruction(BaseModel):
     direction: Literal["left", "right", "straight"]
     danger: Literal["immediate", "high", "medium", "low"]
     
+    start: Coordinate # start coordinate of the instruction
+    end: Coordinate # end coordinate of the instruction
     distance: float  # distance in pixels/units to the turn
     angle_change: float  # angle change in degrees
     length: float  # length of the path segment in pixels/units
     instruction_type: Literal["turn", "curve", "bearing"]
-    
+
 class PathColours(BaseModel):
     close: tuple[int, int, int]
     mid: tuple[int, int, int]

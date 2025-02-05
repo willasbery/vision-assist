@@ -60,11 +60,18 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
     processing_times = []
    
     try:
+        frame_count = 0  # Initialize a counter for frames
         while mock_cam.isOpened():
             ret, frame = mock_cam.read()
             if not ret:
                 break
-               
+
+            frame_count += 1  # Increment the frame counter
+
+            # Process only every 15th frame
+            if frame_count % 15 != 0:
+                continue
+
             start_time = cv2.getTickCount()
             
             processed_frame = None
