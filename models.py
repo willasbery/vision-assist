@@ -1,10 +1,17 @@
 from __future__ import annotations # for forward reference
 
 import numpy as np
+from enum import Enum
 from pydantic import BaseModel, computed_field
 from typing import Literal, Any
 
 from config import grid_size
+
+
+class FinalAnswer(Enum):
+    MOVE_LEFT = "move_left"
+    MOVE_RIGHT = "move_right"
+    CONTINUE_FORWARD = "continue_forward"
 
 
 class Coordinate(BaseModel):
@@ -114,7 +121,7 @@ class Path(BaseModel):
         if magnitude_v1 == 0 or magnitude_v2 == 0:
             return 0
 
-        angle_radians = np.acos(dot_product / (magnitude_v1 * magnitude_v2))
+        angle_radians = np.arccos(dot_product / (magnitude_v1 * magnitude_v2))
         angle_degrees = np.degrees(angle_radians)
         
         # Make angle negative if end point is to the left of start point

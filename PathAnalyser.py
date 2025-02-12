@@ -3,7 +3,7 @@ import numpy as np
 import time
 from typing import ClassVar, Optional
 
-from models import Path, Instruction
+from models import Path, Instruction, FinalAnswer
 
 # TODO:
 # - sort out the calculations for determining danger level
@@ -91,6 +91,9 @@ class PathAnalyser:
         for corner in path.corners:
             # Higher y value means closer to bottom of frame/user
             distance = corner.start.y
+            
+            if distance < self.frame_height * 0.5:
+                continue
             
             # TODO: determine whether to keep this logic?
             # Calculate position-based weight for angle importance
@@ -279,8 +282,38 @@ class PathAnalyser:
                     current_instructions.remove(instruction)
 
         return current_instructions
+    
+    def determine_final_instruction(self, instructions: list[Instruction]) -> FinalAnswer:
+        """
+        Process analyzed instructions to return a single FinalAnswer enum value.
+        Prioritizes immediate dangers, then uses most critical instruction.
+        """    
+        if not instructions:
+            return FinalAnswer.CONTINUE_FORWARD
+                
+        # Check for immediate danger instructions first
+        immediate_instructions = [i for i in instructions if i.danger == "immediate"]
+        if immediate_instructions:
+            direction = immediate_instructions[0].direction
+            return FinalAnswer.MOVE_LEFT if direction == "left" else FinalAnswer.MOVE_RIGHT
+        
+        # Handle case with only a single bearing instruction
+        if len(instructions) == 1 and instructions[0].instruction_type == "bearing":
+            return FinalAnswer.CONTINUE_FORWARD
+        
+        # Get highest priority instruction based on sorting from PathAnalyser
+        primary_instruction = instructions[0]
+        
+        # Map instruction directions to FinalAnswer
+        if primary_instruction.direction == "left":
+            return FinalAnswer.MOVE_LEFT
+        elif primary_instruction.direction == "right":
+            return FinalAnswer.MOVE_RIGHT
+        
+        return FinalAnswer.CONTINUE_FORWARD
 
-    def __call__(self, frame_height: int, frame_width: int, paths: list[Path]) -> list[Path]:
+
+    def __call__(self, frame_height: int, frame_width: int, paths: list[Path]) -> FinalAnswer:
 
         """
         Process and analyse the paths.
@@ -348,8 +381,9 @@ class PathAnalyser:
             if processing_time - timestamp <= 5000
         }
         
-        # Return as JSON so they can be easily interpreted by the FE
-        return json.dumps([instruction.model_dump() for instruction in self.filtered_instructions])
+        final_answer = self.determine_final_instruction(self.filtered_instructions)
+        
+        return final_answer.value
 
 
 # Create singleton for export
