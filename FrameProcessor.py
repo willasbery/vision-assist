@@ -270,7 +270,7 @@ class FrameProcessor:
         
         cv2.fillPoly(self.frame, [grid_corners], color)
     
-    def __call__(self, frame: np.ndarray) -> tuple[np.ndarray, list[Instruction]] | list[Instruction]:
+    def __call__(self, frame: np.ndarray) -> tuple[np.ndarray, str] | str:
         """
         Process a single frame with path detection and visualization.
         
