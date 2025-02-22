@@ -8,40 +8,40 @@ blurry_frame_check:
   Max: 0.015625
 
 yolo_prediction:
-  Average: 0.03
-  Last: 0.03125
-  Min: 0.015625
+  Average: 0.02
+  Last: 0.015625
+  Min: 0.0
   Max: 0.046875
 
 grid_extraction:
-  Average: 0.03
+  Average: 0.02
   Last: 0.015625
   Min: 0.0
-  Max: 0.15625
+  Max: 0.125
 
 penalty_calculation:
   Average: 0.01
-  Last: 0.0
+  Last: 0.015625
   Min: 0.0
   Max: 0.015625
 
 graph_creation:
-  Average: 0.02
-  Last: 0.015625
+  Average: 0.01
+  Last: 0.0
   Min: 0.0
   Max: 0.109375
 
 protrusion_detection:
-  Average: 0.03
-  Last: 0.015625
+  Average: 0.02
+  Last: 0.03125
   Min: 0.015625
   Max: 0.03125
 
 path_finding:
-  Average: 0.14
-  Last: 0.0625
-  Min: 0.0625
-  Max: 0.328125
+  Average: 0.21
+  Last: 0.09375
+  Min: 0.09375
+  Max: 0.546875
 
 path_analysis:
   Average: 0.00
