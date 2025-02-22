@@ -39,7 +39,7 @@ class FrameProcessor:
             self.grids: list[list[Grid]] = [] # 2d array of grids
             self.grid_lookup: dict[tuple[int, int], Grid] = {} # (x, y) -> Grid mapping
             self.np_grids: np.ndarray = np.empty((0, 0), dtype=np.uint8)
-            self.protrusion_detector = ProtrusionDetector(debug=debug)
+            self.protrusion_detector = ProtrusionDetector(debug=debug, imshow=imshow)
             
     def _reject_blurry_frames(self, frame: np.ndarray) -> bool:
         """Reject blurry frames based on the Laplacian variance."""
