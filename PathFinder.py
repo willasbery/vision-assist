@@ -1,4 +1,6 @@
 import numpy as np
+import random
+import uuid
 from heapq import heappop, heappush
 from typing import ClassVar, Optional
 
@@ -92,7 +94,7 @@ class PathFinder:
 
         return max(angles) if angles else 0
 
-    def _reconstruct_path(self, end_coords: tuple[int, int], start_grid: dict) -> tuple[list[dict], float]:
+    def _reconstruct_path(self, end_coords: tuple[int, int], start_grid: dict) -> tuple[list[Grid], float]:
         """
         Reconstruct the path from the came_from dictionary.
         """
@@ -114,11 +116,27 @@ class PathFinder:
         start_grid: Grid,
         end_grid: Grid,
         grid_lookup: dict[tuple[int, int], Grid]
-    ) -> tuple[list[dict], float]:
+    ) -> tuple[list[Grid], float]:
         """
         Find the optimal path between start and end grids using A* algorithm,
         penalising sharp angle changes for smoother paths.
         """
+        # Save all the variables to a text file so they can be used in the optimise_path_finder
+        with open("./utilities/optimise_path_finder/path_examples.py", "a") as f:
+            data = {
+                "invocation_id": uuid.uuid4(),
+                "graph": graph,
+                "start_grid": start_grid,
+                "end_grid": end_grid,
+                "grid_lookup": grid_lookup
+            }
+            # Convert to a string
+            data = str(data)
+            # Replace the list class with the word list
+            data = data.replace("<class 'list'>", "list")
+            
+            f.write(f"{data},\n")
+        
         self._reset_path_state()
         self._grid_lookup = grid_lookup
 
