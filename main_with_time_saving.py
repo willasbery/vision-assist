@@ -6,7 +6,7 @@ from pathlib import Path
 from ultralytics import YOLO
 
 from models import Instruction
-from FrameProcessor_with_saving import FrameProcessor
+from FrameProcessor_with_time_saving import FrameProcessor
 from MockCamera import MockCamera
 
 
