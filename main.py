@@ -126,7 +126,6 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
             if instructions: processing_times.append(processing_time)
             print(f"Instructions: {instructions}")
             print(f"Processing time: {processing_time} seconds")
-
     except KeyboardInterrupt:
         if processing_times:
             avg_processing_time = sum(processing_times) / len(processing_times)

@@ -4,7 +4,6 @@ from typing import ClassVar, Optional
 
 from vision_assist.models import Grid
 
-
 class PathFinder:
     """
     PathFinder handles pathfinding operations using the A* algorithm,
@@ -29,6 +28,8 @@ class PathFinder:
             self._came_from: dict[tuple[int, int], tuple[int, int]] = {}
             self._g_score: dict[tuple[int, int], float] = {}
             self._f_score: dict[tuple[int, int], float] = {}
+            
+            self.angle_cache: dict[tuple[tuple[int, int], tuple[int, int]], float] = {} # this is not cleared between runs!
 
     def _reset_path_state(self) -> None:
         """Reset the internal state for a new pathfinding operation."""
@@ -37,6 +38,8 @@ class PathFinder:
         self._came_from.clear()
         self._g_score.clear()
         self._f_score.clear()
+        # DON'T CLEAR ANGLE CACHE AS IT IS ADVANTAGEOUS TO KEEP
+        # self.angle_cache.clear()
 
     def _heuristic(self, grid1: dict, grid2: dict) -> float:
         """
@@ -60,39 +63,38 @@ class PathFinder:
         if len(path) < segment_size:
             return 0
 
+        np_path = np.array(path)
         angles = []
         # Use a sliding window approach to analyze segments
-        half_segment = segment_size // 2
+        half = segment_size // 2
         
-        for i in range(half_segment, len(path) - half_segment - 1):
-            # Get points before and after the current point
-            prev_points = path[i - half_segment:i + 1]
-            next_points = path[i:i + half_segment + 1]
+        for i in range(half, len(path) - half - 1):
+            # Get vectors before and after the current point
+            vec1 = np_path[i] - np_path[i - half]
+            vec2 = np_path[i + half] - np_path[i]
             
-            # Calculate direction vectors for both segments
-            prev_vector = (
-                prev_points[-1][0] - prev_points[0][0],
-                prev_points[-1][1] - prev_points[0][1]
-            )
-            next_vector = (
-                next_points[-1][0] - next_points[0][0],
-                next_points[-1][1] - next_points[0][1]
-            )
-
-            # Calculate angle between vectors
-            dot_product = prev_vector[0] * next_vector[0] + prev_vector[1] * next_vector[1]
-            magnitude_prev = (prev_vector[0]**2 + prev_vector[1]**2)**0.5
-            magnitude_next = (next_vector[0]**2 + next_vector[1]**2)**0.5
-
-            if magnitude_prev == 0 or magnitude_next == 0:
+            # Convert vectors to tuples to use as cache keys
+            key = (tuple(vec1), tuple(vec2))
+            if key in self.angle_cache:
+                angles.append(self.angle_cache[key])
+                continue
+            
+            # Calculate the norms and check for zero-length vectors
+            norm1 = np.linalg.norm(vec1)
+            norm2 = np.linalg.norm(vec2)
+            
+            if norm1 == 0 or norm2 == 0:
                 continue
 
-            angle = np.arccos(np.clip(dot_product / (magnitude_prev * magnitude_next), -1.0, 1.0))
-            angles.append(np.degrees(angle))
+            # Calculate the angle between the vectors
+            dot = np.dot(vec1, vec2)
+            angle = np.degrees(np.arccos(np.clip(dot / (norm1 * norm2), -1.0, 1.0)))
+            angles.append(angle)
+            self.angle_cache[key] = angle
 
         return max(angles) if angles else 0
 
-    def _reconstruct_path(self, end_coords: tuple[int, int], start_grid: dict) -> tuple[list[dict], float]:
+    def _reconstruct_path(self, end_coords: tuple[int, int], start_grid: dict) -> tuple[list[Grid], float]:
         """
         Reconstruct the path from the came_from dictionary.
         """
@@ -114,7 +116,7 @@ class PathFinder:
         start_grid: Grid,
         end_grid: Grid,
         grid_lookup: dict[tuple[int, int], Grid]
-    ) -> tuple[list[dict], float]:
+    ) -> tuple[list[Grid], float]:
         """
         Find the optimal path between start and end grids using A* algorithm,
         penalising sharp angle changes for smoother paths.
@@ -161,6 +163,7 @@ class PathFinder:
 
                 # Adjust penalty multiplier to be more lenient
                 penalty_multiplier = 1 + (0.5 * (neighbour_grid.penalty or 0)) + angle_penalty * 1.5
+                # penalty_multiplier = 1 + (0.5 * (neighbour_grid.penalty or 0))
                 tentative_g_score = self._g_score[current_coords] + (distance * penalty_multiplier)
 
                 if (neighbour_coords not in self._g_score or
