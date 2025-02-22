@@ -46,9 +46,9 @@ class MockCamera:
         ret, frame = self.cap.read()
         
         # Loop video if we've reached the end
-        if not ret:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            ret, frame = self.cap.read()
+        # if not ret:
+        #     self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        #     ret, frame = self.cap.read()
             
         self.last_frame_time = time.time()
         return ret, frame
