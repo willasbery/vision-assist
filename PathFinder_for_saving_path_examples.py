@@ -1,8 +1,11 @@
 import numpy as np
+import random
+import uuid
 from heapq import heappop, heappush
 from typing import ClassVar, Optional
 
 from models import Grid
+
 
 class PathFinder:
     """
@@ -59,26 +62,35 @@ class PathFinder:
         if len(path) < segment_size:
             return 0
 
-        np_path = np.array(path)
         angles = []
         # Use a sliding window approach to analyze segments
-        half = segment_size // 2
+        half_segment = segment_size // 2
         
-        for i in range(half, len(path) - half - 1):
+        for i in range(half_segment, len(path) - half_segment - 1):
             # Get points before and after the current point
-            vec1 = np_path[i] - np_path[i - half]
-            vec2 = np_path[i + half] - np_path[i]
+            prev_points = path[i - half_segment:i + 1]
+            next_points = path[i:i + half_segment + 1]
             
             # Calculate direction vectors for both segments
-            norm1 = np.linalg.norm(vec1)
-            norm2 = np.linalg.norm(vec2)
-            
-            if norm1 == 0 or norm2 == 0: continue
+            prev_vector = (
+                prev_points[-1][0] - prev_points[0][0],
+                prev_points[-1][1] - prev_points[0][1]
+            )
+            next_vector = (
+                next_points[-1][0] - next_points[0][0],
+                next_points[-1][1] - next_points[0][1]
+            )
 
             # Calculate angle between vectors
-            dot = np.dot(vec1, vec2)
-            angle = np.degrees(np.arccos(np.clip(dot / (norm1 * norm2), -1.0, 1.0)))
-            angles.append(angle)
+            dot_product = prev_vector[0] * next_vector[0] + prev_vector[1] * next_vector[1]
+            magnitude_prev = (prev_vector[0]**2 + prev_vector[1]**2)**0.5
+            magnitude_next = (next_vector[0]**2 + next_vector[1]**2)**0.5
+
+            if magnitude_prev == 0 or magnitude_next == 0:
+                continue
+
+            angle = np.arccos(np.clip(dot_product / (magnitude_prev * magnitude_next), -1.0, 1.0))
+            angles.append(np.degrees(angle))
 
         return max(angles) if angles else 0
 
@@ -109,6 +121,22 @@ class PathFinder:
         Find the optimal path between start and end grids using A* algorithm,
         penalising sharp angle changes for smoother paths.
         """
+        # Save all the variables to a text file so they can be used in the optimise_path_finder
+        with open("./utilities/optimise_path_finder/path_examples.py", "a") as f:
+            data = {
+                "invocation_id": uuid.uuid4(),
+                "graph": graph,
+                "start_grid": start_grid,
+                "end_grid": end_grid,
+                "grid_lookup": grid_lookup
+            }
+            # Convert to a string
+            data = str(data)
+            # Replace the list class with the word list
+            data = data.replace("<class 'list'>", "list")
+            
+            f.write(f"{data},\n")
+        
         self._reset_path_state()
         self._grid_lookup = grid_lookup
 
@@ -151,7 +179,6 @@ class PathFinder:
 
                 # Adjust penalty multiplier to be more lenient
                 penalty_multiplier = 1 + (0.5 * (neighbour_grid.penalty or 0)) + angle_penalty * 1.5
-                # penalty_multiplier = 1 + (0.5 * (neighbour_grid.penalty or 0))
                 tentative_g_score = self._g_score[current_coords] + (distance * penalty_multiplier)
 
                 if (neighbour_coords not in self._g_score or

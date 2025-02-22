@@ -48,6 +48,9 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
     # Mock camera for testing
     mock_cam = MockCamera(source, target_fps=30)
     
+    with open("./utilities/optimise_path_finder/path_examples.py", "w") as f:
+        f.write(f"from uuid import UUID\nfrom collections import defaultdict\nfrom models import Grid, Coordinate\n\nexamples=[")
+    
     # Setup output directory for saved frames
     save_dir = Path(output)
     frames_dir = save_dir / f"{Path(source).stem}_saved_frames"
@@ -128,6 +131,10 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
             if instructions: processing_times.append(processing_time)
             print(f"Instructions: {instructions}")
             print(f"Processing time: {processing_time} seconds")
+            
+        with open("./utilities/optimise_path_finder/path_examples.py", "a") as f:
+            f.write("]")
+
     except KeyboardInterrupt:
         if processing_times:
             avg_processing_time = sum(processing_times) / len(processing_times)

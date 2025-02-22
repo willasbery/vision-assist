@@ -9,7 +9,7 @@ import time
 from config import grid_size
 from models import Coordinate, Grid, Instruction, Path
 from PathAnalyser import path_analyser
-from PathFinder import path_finder
+from PathFinder_for_saving_path_examples import path_finder
 from PathVisualiser import path_visualiser
 from PenaltyCalculator import penalty_calculator
 from ProtrusionDetector import ProtrusionDetector
