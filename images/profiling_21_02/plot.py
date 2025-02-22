@@ -73,7 +73,7 @@ def main(timing_data_path: Path):
     for operation, values in timing_data.items():
         average_time += values[0]
   
-    print(f"Average time to process a single (successful) frame (s): {average_time / 1_000_000_000}")
+    print(f"Average time to process a single (successful) frame (s): {average_time}")
     
     # Create and save the box plot
     create_box_plot(timing_data_path, timing_data)
