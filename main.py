@@ -5,10 +5,8 @@ import time
 from pathlib import Path
 from ultralytics import YOLO
 
-from models import Instruction
-from FrameProcessor import FrameProcessor
-from MockCamera import MockCamera
-
+from vision_assist.FrameProcessor import FrameProcessor
+from vision_assist.MockCamera import MockCamera
 
 
 def parse_opt():
@@ -60,11 +58,18 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
     processing_times = []
    
     try:
+        frame_count = 0  # Initialize a counter for frames
         while mock_cam.isOpened():
             ret, frame = mock_cam.read()
             if not ret:
                 break
-               
+
+            frame_count += 1  # Increment the frame counter
+
+            # Process only every 15th frame
+            if frame_count % 15 != 0:
+                continue
+
             start_time = cv2.getTickCount()
             
             processed_frame = None
@@ -121,7 +126,6 @@ def main(weights: str | Path = 'yolov8n-seg.pt',
             if instructions: processing_times.append(processing_time)
             print(f"Instructions: {instructions}")
             print(f"Processing time: {processing_time} seconds")
-
     except KeyboardInterrupt:
         if processing_times:
             avg_processing_time = sum(processing_times) / len(processing_times)

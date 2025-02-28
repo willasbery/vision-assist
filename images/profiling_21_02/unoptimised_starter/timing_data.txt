@@ -1,0 +1,50 @@
+	Timing Data (nanoseconds)
+	=======================
+	
+	blurry_frame_check:
+	  Average: 0.01
+	  Last: 0.0
+	  Min: 0.0
+	  Max: 0.015625
+	
+	yolo_prediction:
+	  Average: 0.03
+	  Last: 0.03125
+	  Min: 0.0
+	  Max: 0.046875
+	
+	grid_extraction:
+	  Average: 0.02
+	  Last: 0.015625
+	  Min: 0.0
+	  Max: 0.109375
+	
+	penalty_calculation:
+	  Average: 0.10
+	  Last: 0.078125
+	  Min: 0.0625
+	  Max: 0.125
+	
+	graph_creation:
+	  Average: 0.02
+	  Last: 0.015625
+	  Min: 0.0
+	  Max: 0.140625
+	
+	protrusion_detection:
+	  Average: 0.02
+	  Last: 0.015625
+	  Min: 0.015625
+	  Max: 0.03125
+	
+	path_finding:
+	  Average: 0.10
+	  Last: 0.046875
+	  Min: 0.046875
+	  Max: 0.28125
+	
+	path_analysis:
+	  Average: 0.00
+	  Last: 0.0
+	  Min: 0.0
+	  Max: 0.015625

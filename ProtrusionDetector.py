@@ -2,9 +2,9 @@ import cv2
 import numpy as np
 from typing import ClassVar, Optional
 
-from config import grid_size
-from models import Grid, Peak, ConvexityDefect, Coordinate
-from utils import get_closest_grid_to_point, point_to_line_distance
+from vision_assist.config import grid_size
+from vision_assist.models import Grid, Peak, ConvexityDefect, Coordinate
+from vision_assist.utils import get_closest_grid_to_point, point_to_line_distance
 
 
 class ProtrusionDetector:
@@ -14,13 +14,14 @@ class ProtrusionDetector:
     _instance: ClassVar[Optional['ProtrusionDetector']] = None
     _initialized: bool = False
     
-    def __new__(cls, debug: bool):
+    def __new__(cls, debug: bool, imshow: bool):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance.debug = debug
+            cls._instance.imshow = imshow
         return cls._instance
     
-    def __init__(self, debug: bool):
+    def __init__(self, debug: bool, imshow: bool):
         """Initialize the detector only once."""
         if not self._initialized:
             self._initialized = True
@@ -125,7 +126,7 @@ class ProtrusionDetector:
             right = Coordinate(x=int(group[-1]) + x_offset, y=int(min_y) + y_offset)
             
             # Debug visualization
-            if self.debug is True and region_around_protrusion is not None:
+            if self.debug and self.imshow and region_around_protrusion is not None:
                 debug_img = region.copy()
                 # Convert to local coordinates for visualization
                 local_centre = Coordinate(x=centre_x, y=int(min_y))
@@ -432,90 +433,91 @@ class ProtrusionDetector:
         # Create debug image (copy of original frame or blank canvas)
         debug_image = self.create_debug_image()
         
-        # Find global peak
+        # Find global peak - the highest point in the mask, we always kind of assume the user
+        # is walking from the bottom to the top of the frame
         global_peaks = self._find_peak()
         if global_peaks is None:
             print("No global peak found.")
             return []
             
         # Process contours
-        contours, _ = cv2.findContours(self.binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            print("No contours found.")
-            return []
+        # contours, _ = cv2.findContours(self.binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # if not contours:
+        #     print("No contours found.")
+        #     return []
         
-        protrusions = []
+        # protrusions = []
         
-        contour = max(contours, key=cv2.contourArea)
+        # contour = max(contours, key=cv2.contourArea)
         
-        # TODO: fix the smooth protrusions so they do not overfire
-        # smooth_protrusions = self._detect_smooth_protrusions(contour)
-        # protrusions.extend(smooth_protrusions)
+        # # TODO: fix the smooth protrusions so they do not overfire
+        # # smooth_protrusions = self._detect_smooth_protrusions(contour)
+        # # protrusions.extend(smooth_protrusions)
             
-        x, y, w, h = cv2.boundingRect(contour)
+        # x, y, w, h = cv2.boundingRect(contour)
         
-        # Draw convex hull in green
-        hull = cv2.convexHull(contour)
-        # cv2.drawContours(debug_image, [hull], -1, (0, 255, 0), 2)
+        # # Draw convex hull in green
+        # hull = cv2.convexHull(contour)
+        # # cv2.drawContours(debug_image, [hull], -1, (0, 255, 0), 2)
         
-        quad = self._get_quadrilateral(global_peaks, contour)
+        # quad = self._get_quadrilateral(global_peaks, contour)
         
-        # Draw quadrilateral in blue
-        quad_points = np.array([[p.x, p.y] for p in quad], dtype=np.int32)
-        # cv2.polylines(debug_image, [quad_points], True, (255, 0, 0), 2)
+        # # Draw quadrilateral in blue
+        # quad_points = np.array([[p.x, p.y] for p in quad], dtype=np.int32)
+        # # cv2.polylines(debug_image, [quad_points], True, (255, 0, 0), 2)
         
-        # Process defects
-        hull_indices = cv2.convexHull(contour, returnPoints=False)
-        defects = cv2.convexityDefects(contour, hull_indices)
+        # # Process defects
+        # hull_indices = cv2.convexHull(contour, returnPoints=False)
+        # defects = cv2.convexityDefects(contour, hull_indices)
         
-        print("Len defects:", len(defects))
+        # print("Len defects:", len(defects))
         
-        if defects is None:
-            return [global_peak.centre for global_peak in global_peaks]
+        # if defects is None:
+        #     return [global_peak.centre for global_peak in global_peaks]
       
-        for defect in defects:
-            convexity_defect = ConvexityDefect(
-                start=Coordinate(x=int(contour[defect[0][0]][0][0]), y=int(contour[defect[0][0]][0][1])),
-                end=Coordinate(x=int(contour[defect[0][1]][0][0]), y=int(contour[defect[0][1]][0][1])),
-                far=Coordinate(x=int(contour[defect[0][2]][0][0]), y=int(contour[defect[0][2]][0][1])),
-                depth=float(defect[0][3])
-            )
+        # for defect in defects:
+        #     convexity_defect = ConvexityDefect(
+        #         start=Coordinate(x=int(contour[defect[0][0]][0][0]), y=int(contour[defect[0][0]][0][1])),
+        #         end=Coordinate(x=int(contour[defect[0][1]][0][0]), y=int(contour[defect[0][1]][0][1])),
+        #         far=Coordinate(x=int(contour[defect[0][2]][0][0]), y=int(contour[defect[0][2]][0][1])),
+        #         depth=float(defect[0][3])
+        #     )
                         
-            if not (convexity_defect.depth > 0.25 * w and 
-                30 < convexity_defect.angle_degrees < 150 and
-                convexity_defect.start.y < y + (0.8 * h)):
-                continue     
+        #     if not (convexity_defect.depth > 0.25 * w and 
+        #         30 < convexity_defect.angle_degrees < 150 and
+        #         convexity_defect.start.y < y + (0.8 * h)):
+        #         continue     
                 
-            region_around_protrusion = self._get_region_around_protrusion(convexity_defect.start)            
+        #     region_around_protrusion = self._get_region_around_protrusion(convexity_defect.start)            
             
-            peaks = self._find_peak(convexity_defect.start, region_around_protrusion)
+        #     peaks = self._find_peak(convexity_defect.start, region_around_protrusion)
             
-            for peak in peaks:
-                point_near_quad = self._is_point_near_quadrilateral(peak.centre, quad, threshold=150)
-                point_inside = cv2.pointPolygonTest(quad_points, peak.centre.to_tuple(), False) >= 0
+        #     for peak in peaks:
+        #         point_near_quad = self._is_point_near_quadrilateral(peak.centre, quad, threshold=150)
+        #         point_inside = cv2.pointPolygonTest(quad_points, peak.centre.to_tuple(), False) >= 0
                 
-                if not point_near_quad and not point_inside:
-                    protrusions.append(peak.centre)
-                    # cv2.circle(debug_image, (peak.centre.x, peak.centre.y), 5, (0, 0, 255), -1)
+        #         if not point_near_quad and not point_inside:
+        #             protrusions.append(peak.centre)
+        #             # cv2.circle(debug_image, (peak.centre.x, peak.centre.y), 5, (0, 0, 255), -1)
                 
-        filtered_protrusions = self._filter_protrusions(protrusions, hull, global_peaks)
+        # filtered_protrusions = self._filter_protrusions(protrusions, hull, global_peaks)
         
         # DEBUG
-        if self.debug:
+        if self.debug and self.imshow:
             # Add legend
             legend_y = 30
             # Draw global peak last so it's on top
             for global_peak in global_peaks:
                 cv2.circle(debug_image, (global_peak.centre.x, global_peak.centre.y), 8, (255, 0, 255), -1)  # magenta
                 
-            # cv2.putText(debug_image, "Binary Image: Gray", (10, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (128, 128, 128), 1)
-            # cv2.putText(debug_image, "Convex Hull: Green", (10, legend_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-            # cv2.putText(debug_image, "Quadrilateral: Blue", (10, legend_y + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-            # cv2.putText(debug_image, "Defect Points: Yellow", (10, legend_y + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-            # cv2.putText(debug_image, "Far Points: Cyan", (10, legend_y + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-            # cv2.putText(debug_image, "Protrusions: Red", (10, legend_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-            # cv2.putText(debug_image, "Global Peak: Magenta", (10, legend_y + 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
-            # cv2.putText(debug_image, "Frames Processed: " + str(self.frames_processed), (10, legend_y + 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_image, "Binary Image: Gray", (10, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (128, 128, 128), 1)
+            cv2.putText(debug_image, "Convex Hull: Green", (10, legend_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            cv2.putText(debug_image, "Quadrilateral: Blue", (10, legend_y + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+            cv2.putText(debug_image, "Defect Points: Yellow", (10, legend_y + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+            cv2.putText(debug_image, "Far Points: Cyan", (10, legend_y + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+            cv2.putText(debug_image, "Protrusions: Red", (10, legend_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            cv2.putText(debug_image, "Global Peak: Magenta", (10, legend_y + 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+            cv2.putText(debug_image, "Frames Processed: " + str(self.frames_processed), (10, legend_y + 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
             
             resized_debug = cv2.resize(debug_image, (576, 1024), interpolation=cv2.INTER_AREA)
@@ -528,4 +530,5 @@ class ProtrusionDetector:
             print("Length of global peaks:", len(global_peaks))
             # END OF DEBUG
             
-        return [global_peak.centre for global_peak in global_peaks] + filtered_protrusions
+        # return [global_peak.centre for global_peak in global_peaks] + filtered_protrusions
+        return [global_peak.centre for global_peak in global_peaks]

@@ -1,6 +1,6 @@
 import numpy as np
 
-from models import Coordinate, Grid
+from vision_assist.models import Coordinate, Grid
 
 
 def get_closest_grid_to_point(point: Coordinate, grids: list[list[Grid]]):
