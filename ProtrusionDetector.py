@@ -430,7 +430,8 @@ class ProtrusionDetector:
         self.frames_processed += 1
         
         # Create debug image (copy of original frame or blank canvas)
-        debug_image = self.create_debug_image()
+        if self.debug:
+            debug_image = self.create_debug_image()
         
         # Find global peak
         global_peaks = self._find_peak()

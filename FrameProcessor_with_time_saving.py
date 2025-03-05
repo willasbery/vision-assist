@@ -29,7 +29,6 @@ class FrameProcessor:
         return cls._instance
     
     def __init__(self, model: YOLO, verbose: bool, debug: bool, timing_data_path: Path) -> None:
-        """Initialize the processor only once."""
         if not self._initialized:
             self._initialized = True
             self.model = model
@@ -57,10 +56,22 @@ class FrameProcessor:
         self.grid_lookup.clear()
         self.np_grids = np.empty((0, 0), dtype=np.uint8)
         
+        # Pre-calculate common values
+        frame_width = self.frame.shape[1]
+        frame_height = self.frame.shape[0]
+        
+        artifical_grid_column_xs = [
+            x for x in range(
+                (self.frame.shape[1] // 2) - (grid_size * 8), 
+                (self.frame.shape[1] // 2) + (grid_size * (8 + 1)), grid_size
+            )
+        ]
+        
         for result in results:
             if result.masks is None:
                 continue
             
+            # Deal with the case where we have multiple masks
             mask_count = len(result.masks.xy)
             mask = max(result.masks.xy, key=lambda x: cv2.contourArea(x)) if mask_count > 1 else result.masks.xy[0]
                 
@@ -74,96 +85,93 @@ class FrameProcessor:
             w = self.frame.shape[1] if w > self.frame.shape[1] else w                
             h = h + (grid_size - h % grid_size) if h % grid_size != 0 else h
             
-            artifical_grid_column_xs = [
-                x for x in range(
-                    (self.frame.shape[1] // 2) - (grid_size * 8), 
-                    (self.frame.shape[1] // 2) + (grid_size * (8 + 1)), grid_size
-                )
-            ]
-            added_a_grid = False
+            mask_img = np.zeros((frame_height, frame_width), dtype=np.uint8)
+            cv2.fillPoly(mask_img, points, 1)
+            
+            j_vals = np.arange(x, x + w, grid_size)
+            i_vals = np.arange(y, y + h, grid_size)
+            
+            rows = len(i_vals)
+            cols = len(j_vals)
+            
+            J, I = np.meshgrid(j_vals + grid_size // 2, i_vals + grid_size // 2)
+            centers = np.stack((J, I), axis=-1).reshape(-1, 2)
+        
+            in_mask = np.array([mask_img[pt[1], pt[0]] > 0 for pt in centers]).reshape(rows, cols)
+            
+            if not np.any(in_mask):
+                # print("No grids were added for the mask.")
+                return
                 
             # First create grids for the actual mask
-            row_count = 0
-            for i in range(y, y + h, grid_size):
-                col_count = 0
+            for row_idx, i in enumerate(i_vals):
                 this_row = []
                 
-                for j in range(x, x + w, grid_size):
+                for col_idx, j in enumerate(j_vals):
                     grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
-                    in_mask = cv2.pointPolygonTest(points, grid_centre.to_tuple(), False) >= 0
-                    
-                    if in_mask: added_a_grid = True
+                    grid_in_mask = in_mask[row_idx, col_idx]
                     
                     grid = Grid(
                         coords=Coordinate(x=j, y=i), 
                         centre=grid_centre, 
                         penalty=None, 
-                        row=row_count, 
-                        col=col_count, 
-                        empty=not in_mask,
+                        row=row_idx, 
+                        col=col_idx, 
+                        empty=not grid_in_mask,
                         artificial=False
                     )
                             
                     this_row.append(grid)
                     self.grid_lookup[(j, i)] = grid
-                    col_count += 1
                 
                 self.grids.append(this_row)
-                row_count += 1
-                
-            if not added_a_grid:
-                print("No grids were added for the mask.")
-                continue
-                        
-            starting_y = int(self.frame.shape[0] * 0.875) + (grid_size - int(self.frame.shape[0] * 0.875) % grid_size)
+            
+            starting_y = int(frame_height * 0.875)            
+            starting_y = starting_y + (grid_size - starting_y % grid_size) % grid_size
             
             # Add the artificial grids to the np_grids array
-            for i in range (starting_y, self.frame.shape[0], grid_size):
-                row_count = (i - y) // grid_size
+            artificial_y_vals = np.arange(starting_y, frame_height, grid_size)
+            for i in artificial_y_vals:
+                row_idx = (i - y) // grid_size
+                            
                 this_row = []
-                
-                for j in range(x, x + w, grid_size):
-                    previously_empty = self.grid_lookup.get((j, i)).empty if self.grid_lookup.get((j, i)) else True
-                                
+                for col_idx, j in enumerate(j_vals):
+                    this_grid = self.grid_lookup.get((j, i))
+                    previously_empty = this_grid.empty if this_grid else True
+                    
+                    is_artificial_column = j in artifical_grid_column_xs
+                         
                     if previously_empty:
-                        if j in artifical_grid_column_xs:
-                            empty = False
-                            artificial = True
-                        else:
-                            empty = True
-                            artificial = False
+                        empty = not is_artificial_column
+                        artificial = is_artificial_column
                     else:
                         empty = False
                         artificial = False
                             
-                    grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))   
-                    col = (j - x) // grid_size
+                    grid_centre = Coordinate(x=(j + grid_size // 2), y=(i + grid_size // 2))
                     grid = Grid(
-                        coords=Coordinate(x=j, y=i), 
-                        centre=grid_centre, 
-                        penalty=None, 
-                        row=row_count, 
-                        col=col, 
+                        coords=Coordinate(x=j, y=i),
+                        centre=grid_centre,
+                        penalty=None,
+                        row=row_idx,
+                        col=col_idx,
                         empty=empty,
                         artificial=artificial
-                    ) 
+                    )
                                                     
                     self.grid_lookup[(j, i)] = grid
                     this_row.append(grid)
                 
-                if row_count < len(self.grids) - 1:
-                    self.grids[row_count] = this_row
+                if row_idx < len(self.grids) - 1:
+                    self.grids[row_idx] = this_row
                 else:
                     self.grids.append(this_row)
                     
             # At the end, we need to create a numpy array of the grid
-            number_of_rows = len(self.grids)
-            number_of_columns = len(self.grids[0])
-            self.np_grids = np.zeros((number_of_rows, number_of_columns), dtype=np.uint8)
-            
-            for row_index, row in enumerate(self.grids):
-                for col_index, grid in enumerate(row):
-                    self.np_grids[row_index, col_index] = 0 if grid.empty else 1
+            self.np_grids = np.array(
+                [[0 if grid.empty else 1 for grid in row] for row in self.grids],
+                dtype=np.uint8
+            )
     
     def _calculate_penalties(self) -> None:
         """Calculate penalties for each grid."""
