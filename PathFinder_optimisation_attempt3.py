@@ -2,7 +2,7 @@ import numpy as np
 from heapq import heappop, heappush
 from typing import ClassVar, Optional
 
-from vision_assist.models import Grid
+from models import Grid
 
 class PathFinder:
     """
