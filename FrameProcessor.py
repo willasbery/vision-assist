@@ -198,7 +198,7 @@ class FrameProcessor:
                 ]
                 
                 for nx, ny in neighbor_positions:
-                    if neighbor_grid := self.grid_lookup.get((nx, ny)):
+                    if self.grid_lookup.get((nx, ny)):
                         dist = np.sqrt((x - nx)**2 + (y - ny)**2)
                         graph[current_pos].append(((nx, ny), dist))
         
@@ -235,10 +235,11 @@ class FrameProcessor:
         start_grid = get_closest_grid_to_point(Coordinate(x=self.frame.shape[1] // 2, y=self.frame.shape[0]), self.grids)
         
         for peak in protrusion_peaks:
-            closest_grid = get_closest_grid_to_point(peak, self.grids)
+            end_grid = get_closest_grid_to_point(peak, self.grids)
             
-            grid_path, total_cost = path_finder.find_path(graph, start_grid, closest_grid, self.grid_lookup)
+            grid_path, total_cost = path_finder.find_path(graph, start_grid, end_grid, self.grid_lookup)
             
+            # I can't think of any reason why this would be false, but just in case
             if grid_path:
                 path = Path(
                     grids=grid_path,
@@ -259,14 +260,27 @@ class FrameProcessor:
             for existing_path in unique_paths:
                 similarity = self._calculate_path_similarity(path, existing_path)
                 
-                if similarity >= 0.90:  # Adjusted threshold for section-based comparison
+                if similarity >= 0.90:  # Reject paths that are too similar
                     is_unique = False
                     break
             
-            if is_unique:
-                unique_paths.append(path)
+            if is_unique: unique_paths.append(path)
         
         return unique_paths
+    
+    # ------- DEBUG FUNCTIONS -------
+    def _draw_grid(self, grid: dict, color: tuple[int, int, int]) -> None:
+        """Draw a single grid on the frame."""
+        x, y = grid.coords.x, grid.coords.y
+        
+        grid_corners = np.array([
+            [x, y],
+            [x + grid_size, y],
+            [x + grid_size, y + grid_size],
+            [x, y + grid_size]
+        ], np.int32)
+        
+        cv2.fillPoly(self.frame, [grid_corners], color)
     
     def _draw_non_path_grids(self) -> None:
         """Draw all non-path grids with their penalty colors."""
@@ -280,19 +294,7 @@ class FrameProcessor:
                 coords = (grid.coords.x, grid.coords.y)
                 if coords not in path_grid_coords:
                     self._draw_grid(grid, penalty_calculator.get_penalty_colour(grid.penalty or 0))
-    
-    def _draw_grid(self, grid: dict, color: tuple[int, int, int]) -> None:
-        """Draw a single grid on the frame."""
-        x, y = grid.coords.x, grid.coords.y
-        
-        grid_corners = np.array([
-            [x, y],
-            [x + grid_size, y],
-            [x + grid_size, y + grid_size],
-            [x, y + grid_size]
-        ], np.int32)
-        
-        cv2.fillPoly(self.frame, [grid_corners], color)
+    # ------- END OF DEBUG FUNCTIONS -------
     
     def __call__(self, frame: np.ndarray) -> tuple[np.ndarray, list[Instruction]] | list[Instruction]:
         """
