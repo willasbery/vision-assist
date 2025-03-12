@@ -8,3 +8,9 @@ model/yolo*
 # Files are too big for git
 /results
 /videos
+
+model/test
+model/train
+model/valid
+
+model/runs/segment/train*/**/*.jpg

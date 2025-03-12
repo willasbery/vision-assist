@@ -1,7 +1,7 @@
-path: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_model\
-train: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_model\train\images
-val: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_model\valid\images
-test: C:\Users\willi\Desktop\Uni\Year3Project\vision_assist_segmentation_model\test\images
+path: C:\Users\willi\Desktop\Uni\Year3Project\vision-assist\model\
+train: C:\Users\willi\Desktop\Uni\Year3Project\vision-assist\model\train\images
+val: C:\Users\willi\Desktop\Uni\Year3Project\vision-assist\model\valid\images
+test: C:\Users\willi\Desktop\Uni\Year3Project\vision-assist\model\test\images
 
 nc: 1
 names: ["sidewalk"]
