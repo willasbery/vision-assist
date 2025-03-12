@@ -14,9 +14,20 @@ model/train
 model/valid
 
 model/runs/segment/train*/**/*.jpg
+model/runs/segment/train*/**/*.png
+model/runs/segment/train**/**/*.jpg
+model/runs/segment/train**/**/*.png
 
 utilities/**/*.png
 utilities/**/**/*.png
 utilities/**/**/**/*.png
 utilities/**/**/**/**/*.png
 utilities/**/**/**/**/**/*.png
+
+testing/**/*.png
+testing/**/**/*.png
+testing/**/**/**/*.png
+
+misc/
+
+
