@@ -16,3 +16,7 @@ model/valid
 model/runs/segment/train*/**/*.jpg
 
 utilities/**/*.png
+utilities/**/**/*.png
+utilities/**/**/**/*.png
+utilities/**/**/**/**/*.png
+utilities/**/**/**/**/**/*.png
