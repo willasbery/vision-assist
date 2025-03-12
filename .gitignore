@@ -9,6 +9,8 @@ model/yolo*
 /results
 /videos
 
+images/
+
 model/test
 model/train
 model/valid
@@ -23,6 +25,7 @@ utilities/**/**/*.png
 utilities/**/**/**/*.png
 utilities/**/**/**/**/*.png
 utilities/**/**/**/**/**/*.png
+
 
 testing/**/*.png
 testing/**/**/*.png
